@@ -4,6 +4,7 @@
 神职：预言家 + 女巫 + 猎人
 流程：创建房间 → 分配角色 → 夜晚（狼人办掉→预言家验人→女巫行动） → 白天投票 → 判断胜负
 """
+import re
 import random
 import asyncio
 from typing import Dict, Set, List, Optional
@@ -553,6 +554,9 @@ class WerewolfPlugin(Star):
                 yield event.plain_result("✅ 所有狼人已投票完成！游戏结束。")
                 return  # 游戏已结束，退出
 
+            # 重新获取room引用，确保使用最新状态
+            room = self.game_rooms[group_id]
+
             # 进入预言家验人阶段（不管预言家是否存活都进入，避免泄露身份）
             room["phase"] = GamePhase.NIGHT_SEER
             room["seer_checked"] = False
@@ -563,7 +567,6 @@ class WerewolfPlugin(Star):
                 await self.context.send_message(room["msg_origin"], seer_msg)
 
             # 启动预言家定时器（如果预言家已死，等待随机时间后自动进入下一阶段）
-            import random
             seer_alive = any(r == "seer" and pid in room["alive"] for pid, r in room["roles"].items())
             if seer_alive:
                 # 预言家存活，正常倒计时
@@ -616,7 +619,6 @@ class WerewolfPlugin(Star):
 
         # 获取消息内容（去掉命令部分）
         # 支持多种格式：/密谋、/狼人杀 密谋
-        import re
         message_text = re.sub(r'^/?\s*(狼人杀\s*)?密谋\s*', '', event.message_str).strip()
         if not message_text:
             yield event.plain_result("❌ 请输入要发送的消息！\n用法：/密谋 消息内容")
@@ -740,7 +742,6 @@ class WerewolfPlugin(Star):
             # 启动女巫定时器
             # 如果女巫被杀了，给足够时间让她救自己
             # 如果女巫没被杀但已死（前几晚死的），用随机短时间
-            import random
             witch_alive = witch_id in room["alive"]
             witch_is_killed_tonight = (room.get("last_killed") == witch_id)
 
@@ -2027,7 +2028,6 @@ class WerewolfPlugin(Star):
             return target
 
         # 方式2：从消息文本中提取数字（编号1-9或QQ号）
-        import re
         for seg in event.get_messages():
             if hasattr(seg, 'text'):
                 # 查找消息中的数字（支持1-9的编号或长QQ号）
@@ -2693,7 +2693,6 @@ class WerewolfPlugin(Star):
                     await self.context.send_message(room["msg_origin"], seer_msg)
 
                 # 启动预言家定时器（如果预言家已死，等待随机时间后自动进入下一阶段）
-                import random
                 seer_alive = any(r == "seer" and pid in room["alive"] for pid, r in room["roles"].items())
                 if seer_alive:
                     wait_time = self.timeout_seer
@@ -2715,7 +2714,6 @@ class WerewolfPlugin(Star):
                     await self.context.send_message(room["msg_origin"], seer_msg)
 
                 # 启动预言家定时器
-                import random
                 seer_alive = any(r == "seer" and pid in room["alive"] for pid, r in room["roles"].items())
                 if seer_alive:
                     wait_time = self.timeout_seer
@@ -2780,7 +2778,6 @@ class WerewolfPlugin(Star):
                 # 启动女巫定时器
                 # 如果女巫被杀了，给足够时间让她救自己
                 # 如果女巫没被杀但已死（前几晚死的），用随机短时间
-                import random
                 witch_alive = witch_id in room["alive"]
                 witch_is_killed_tonight = (room.get("last_killed") == witch_id)
 
