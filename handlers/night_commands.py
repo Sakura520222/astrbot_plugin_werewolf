@@ -58,13 +58,27 @@ class NightCommandHandler(BaseCommandHandler):
         target_player = room.get_player(target_id)
         room.log(f"🐺 {player.display_name}（狼人）选择刀 {target_player.display_name}")
 
+        # 同步刀人选择到AI狼人队友上下文
+        for teammate in room.get_alive_werewolves():
+            if teammate.id != player_id and teammate.is_ai and teammate.ai_context:
+                teammate.ai_context.add_event(f"狼队友 {player.display_name} 选择刀 {target_player.display_name}")
+
         alive_wolves = room.get_alive_werewolves()
-        voted_count = len(room.vote_state.night_votes)
+        human_wolves = [w for w in alive_wolves if not w.is_ai]
+        ai_wolves = [w for w in alive_wolves if w.is_ai]
+        human_voted_count = sum(1 for w in human_wolves if w.id in room.vote_state.night_votes)
 
-        yield event.plain_result(f"✅ 你选择了办掉目标！当前 {voted_count}/{len(alive_wolves)} 人已投票")
+        yield event.plain_result(f"✅ 你选择了办掉目标！当前 {human_voted_count}/{len(human_wolves)} 名人类狼人已投票")
 
-        # 检查是否所有狼人都投票了
-        if voted_count >= len(alive_wolves):
+        # 如果有AI狼人，每次人类狼人投票都触发AI重新决策
+        if ai_wolves:
+            from ..phases import NightWolfPhase
+            wolf_phase = NightWolfPhase(self.game_manager)
+            await wolf_phase.trigger_ai_wolf_vote(room)
+
+        # 检查是否所有狼人都投票了（包括AI）
+        all_voted = len(room.vote_state.night_votes) >= len(alive_wolves)
+        if all_voted:
             from ..phases import NightWolfPhase
             wolf_phase = NightWolfPhase(self.game_manager)
             await wolf_phase.on_all_voted(room)
@@ -107,12 +121,27 @@ class NightCommandHandler(BaseCommandHandler):
             yield event.plain_result("❌ 没有其他存活的狼人队友！")
             return
 
-        # 发送消息
+        # 发送消息给队友
         msg = f"🐺 队友 {player.display_name} 说：\n{message_text}"
         success_count = 0
         for teammate in teammates:
-            if await self.message_service.send_private_message(room, teammate.id, msg):
+            if teammate.is_ai:
+                # AI队友：加入上下文
+                if teammate.ai_context:
+                    teammate.ai_context.add_wolf_chat(
+                        player.display_name,
+                        message_text,
+                        room.current_round
+                    )
                 success_count += 1
+            else:
+                # 人类队友：发送私聊
+                if await self.message_service.send_private_message(room, teammate.id, msg):
+                    success_count += 1
+
+        # 更新最后密谋时间
+        import time
+        room.wolf_last_chat_time = time.time()
 
         room.log(f"💬 {player.display_name}（狼人）密谋：{message_text}")
         yield event.plain_result(f"✅ 消息已发送给 {success_count} 名队友！")

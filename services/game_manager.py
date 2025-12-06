@@ -3,12 +3,13 @@ import random
 from typing import Dict, Optional, Tuple, TYPE_CHECKING
 from astrbot.api import logger
 
-from ..models import GameRoom, GameConfig, GamePhase, Player, Role
+from ..models import GameRoom, GameConfig, GamePhase, Player, Role, AIPlayerConfig
 from ..roles import RoleFactory
 from .message_service import MessageService
 from .ban_service import BanService
 from .victory_checker import VictoryChecker
 from .ai_reviewer import AIReviewer
+from .ai import AIPlayerService
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
@@ -25,6 +26,7 @@ class GameManager:
         # 初始化服务
         self.message_service = MessageService(context)
         self.ai_reviewer = AIReviewer(context)
+        self.ai_player_service = AIPlayerService(context)
 
     # ========== 房间管理 ==========
 
@@ -63,16 +65,33 @@ class GameManager:
 
         room = self.rooms[group_id]
 
+        # 先解除全员禁言（最重要！放在最前面确保执行）
+        try:
+            await BanService.set_group_whole_ban(room, False)
+        except Exception as e:
+            logger.error(f"[狼人杀] 解除全员禁言失败: {e}")
+
         # 恢复群昵称
-        await BanService.restore_player_cards(room)
+        try:
+            await BanService.restore_player_cards(room)
+        except Exception as e:
+            logger.error(f"[狼人杀] 恢复群昵称失败: {e}")
+
         # 取消定时器
         room.cancel_timer()
+
         # 解除所有禁言
-        await BanService.unban_all_players(room)
-        # 解除全员禁言
-        await BanService.set_group_whole_ban(room, False)
+        try:
+            await BanService.unban_all_players(room)
+        except Exception as e:
+            logger.error(f"[狼人杀] 解除个人禁言失败: {e}")
+
         # 取消所有临时管理员
-        await BanService.clear_temp_admins(room)
+        try:
+            await BanService.clear_temp_admins(room)
+        except Exception as e:
+            logger.error(f"[狼人杀] 取消临时管理员失败: {e}")
+
         # 删除房间
         del self.rooms[group_id]
 
@@ -85,6 +104,38 @@ class GameManager:
         player = Player(id=player_id, name=player_name)
         room.add_player(player)
         return player
+
+    # AI玩家emoji列表（按加入顺序分配）
+    AI_EMOJIS = ["🤖", "🦊", "🐱", "🐰", "🐻", "🐼", "🦁", "🐯", "🐮"]
+
+    def add_ai_player(self, room: GameRoom, ai_name: str, ai_config: AIPlayerConfig) -> Player:
+        """添加AI玩家到房间"""
+        ai_player_id = f"ai_{ai_name}"
+
+        # 根据当前AI数量分配不同emoji
+        current_ai_count = len([p for p in room.players.values() if p.is_ai])
+        emoji = self.AI_EMOJIS[current_ai_count % len(self.AI_EMOJIS)]
+
+        # 预分配性格（但不显示在名称中，避免性格泄露）
+        personality_name = self.ai_player_service.assign_personality(ai_player_id)
+
+        player = Player(
+            id=ai_player_id,
+            name=f"{emoji}{ai_name}",  # 移除性格标签，避免泄露
+            is_ai=True,
+            ai_config=ai_config
+        )
+        room.add_player(player)
+        logger.info(f"[狼人杀] AI玩家 {emoji}{ai_name}({personality_name}) 加入房间 {room.group_id}，性格已隐藏")
+        return player
+
+    def get_ai_players(self, room: GameRoom) -> list:
+        """获取房间内所有AI玩家"""
+        return [p for p in room.players.values() if p.is_ai]
+
+    def get_human_players(self, room: GameRoom) -> list:
+        """获取房间内所有人类玩家"""
+        return [p for p in room.players.values() if not p.is_ai]
 
     # ========== 游戏流程 ==========
 
@@ -107,16 +158,21 @@ class GameManager:
         room.phase = GamePhase.NIGHT_WOLF
         room.current_round = 1
 
+        # 为AI玩家初始化上下文
+        for player in players_list:
+            if player.is_ai:
+                self.ai_player_service.initialize_ai_context(player, room)
+
         # 记录日志
         room.log_round_start()
 
-        # 修改群昵称为编号
+        # 修改群昵称为编号（仅人类玩家）
         await BanService.set_player_numbers(room)
 
         # 开启全员禁言
         await BanService.set_group_whole_ban(room, True)
 
-        # 私聊告知角色
+        # 私聊告知角色（仅人类玩家）
         await self._send_roles_to_players(room)
 
         logger.info(f"[狼人杀] 群 {room.group_id} 游戏开始")
@@ -124,6 +180,11 @@ class GameManager:
     async def _send_roles_to_players(self, room: GameRoom) -> None:
         """私聊告知所有玩家角色（发送角色卡片图片）"""
         for player in room.players.values():
+            # 跳过AI玩家（AI不需要接收私聊）
+            if player.is_ai:
+                logger.info(f"[狼人杀] AI玩家 {player.name} 身份：{player.role.display_name if player.role else '未知'}")
+                continue
+
             if player.role:
                 role_name = player.role.value
 
@@ -164,13 +225,16 @@ class GameManager:
         # 发送胜利消息
         await self.message_service.announce_victory(room, victory_msg, roles_text)
 
-        # 生成AI复盘
-        if winning_faction:
-            ai_review = await self.ai_reviewer.generate_review(room, winning_faction)
-            if ai_review:
-                await self.message_service.send_group_message(room, ai_review)
+        # 生成AI复盘（失败不影响游戏结束）
+        try:
+            if winning_faction:
+                ai_review = await self.ai_reviewer.generate_review(room, winning_faction)
+                if ai_review:
+                    await self.message_service.send_group_message(room, ai_review)
+        except Exception as e:
+            logger.error(f"[狼人杀] AI复盘生成失败: {e}")
 
-        # 清理房间
+        # 清理房间（确保一定会执行）
         await self.cleanup_room(room.group_id)
 
         return True
@@ -239,10 +303,16 @@ class GameManager:
         if not votes:
             return None, False
 
-        # 统计票数
+        # 统计票数（排除弃票）
         vote_counts: Dict[str, int] = {}
         for target_id in votes.values():
+            if target_id == "ABSTAIN":
+                continue  # 跳过弃票
             vote_counts[target_id] = vote_counts.get(target_id, 0) + 1
+
+        # 如果全部弃票，无人出局
+        if not vote_counts:
+            return None, False
 
         # 获取票数最多的目标
         max_votes = max(vote_counts.values())

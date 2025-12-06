@@ -66,6 +66,15 @@ class GameRoom:
     # 夜晚状态
     last_killed_id: Optional[str] = None                 # 上一晚被杀的玩家ID
     seer_checked: bool = False                           # 预言家是否已验人
+    wolf_last_chat_time: Optional[float] = None          # 狼人最后密谋时间戳
+    wolf_ai_voted: bool = False                          # AI狼人是否已投票
+    wolf_ai_chatted: bool = False                        # AI狼人是否已密谋（防止重复）
+    wolf_ai_vote_task: Optional[asyncio.Task] = None     # AI投票定时器任务
+    wolf_ai_process_task: Optional[asyncio.Task] = None  # 全AI狼人处理任务
+
+    # 白天投票状态
+    day_ai_voted: bool = False                           # AI白天是否已投票
+    vote_discussion: List[dict] = field(default_factory=list)  # 投票阶段讨论记录 [{player, content}, ...]
 
     # 遗言状态
     last_words_from_vote: bool = False                   # 遗言是否来自投票放逐

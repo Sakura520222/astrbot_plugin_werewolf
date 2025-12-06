@@ -3,6 +3,7 @@ from .enums import GamePhase, Role
 from .config import GameConfig
 from .player import Player
 from .room import GameRoom, VoteState, SpeakingState
+from .ai_player import AIPlayerConfig, AIPlayerContext
 
 __all__ = [
     "GamePhase",
@@ -12,4 +13,6 @@ __all__ = [
     "GameRoom",
     "VoteState",
     "SpeakingState",
+    "AIPlayerConfig",
+    "AIPlayerContext",
 ]

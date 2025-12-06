@@ -28,6 +28,9 @@ class GameConfig:
     # 禁言配置
     ban_duration_days: int = 30
 
+    # AI玩家配置
+    ai_player_model: str = ""
+
     # AI复盘配置
     enable_ai_review: bool = True
     ai_review_model: str = ""
@@ -89,6 +92,7 @@ class GameConfig:
             timeout_dead_min=config.get("timeout_dead_min", 10),
             timeout_dead_max=config.get("timeout_dead_max", 15),
             ban_duration_days=config.get("ban_duration_days", 30),
+            ai_player_model=config.get("ai_player_model", ""),
             enable_ai_review=config.get("enable_ai_review", True),
             ai_review_model=config.get("ai_review_model", ""),
             ai_review_prompt=config.get("ai_review_prompt", ""),

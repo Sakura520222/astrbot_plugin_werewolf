@@ -1,4 +1,6 @@
 """遗言阶段"""
+import asyncio
+import random
 from typing import TYPE_CHECKING
 from astrbot.api import logger
 
@@ -44,6 +46,11 @@ class LastWordsPhase(BasePhase):
         # 开启全群禁言
         await BanService.set_group_whole_ban(room, True)
 
+        # 如果是AI玩家，自动发遗言
+        if killed_player.is_ai:
+            await self._handle_ai_last_words(room, killed_player)
+            return
+
         # 设置被杀玩家为临时管理员
         await BanService.set_temp_admin(room, killed_player.id)
 
@@ -57,6 +64,30 @@ class LastWordsPhase(BasePhase):
 
         # 启动定时器
         await self.start_timer(room)
+
+    async def _handle_ai_last_words(self, room: "GameRoom", player) -> None:
+        """处理AI玩家遗言"""
+        ai_service = self.game_manager.ai_player_service
+
+        # 延迟模拟思考
+        await asyncio.sleep(random.uniform(3, 6))
+
+        # 生成遗言
+        last_words = await ai_service.generate_last_words(player, room)
+
+        # 发送遗言到群
+        await self.message_service.send_group_message(
+            room, f"💀 {player.display_name} 的遗言：{last_words}"
+        )
+
+        # 记录
+        room.speaking_state.current_speech = [last_words]
+        self._record_last_words(room)
+
+        logger.info(f"[狼人杀] AI玩家 {player.name} 遗言: {last_words[:50]}...")
+
+        # 禁言（AI玩家跳过）
+        await self._finish_last_words(room)
 
     async def on_timeout(self, room: "GameRoom") -> None:
         """遗言超时"""
@@ -107,6 +138,11 @@ class LastWordsPhase(BasePhase):
             if len(full_speech) > 200:
                 full_speech = full_speech[:200] + "..."
             room.log(f"💀遗言：{player.display_name} - {full_speech}")
+
+            # 同步遗言到所有AI玩家上下文
+            for p in room.players.values():
+                if p.is_ai and p.ai_context:
+                    p.ai_context.add_event(f"遗言 {player.display_name}：{full_speech}")
         else:
             room.log(f"💀遗言：{player.display_name} - [未捕获到文字内容]")
 

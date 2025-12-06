@@ -1,4 +1,6 @@
 """白天发言阶段"""
+import asyncio
+import random
 from typing import TYPE_CHECKING
 from astrbot.api import logger
 
@@ -34,6 +36,8 @@ class DaySpeakingPhase(BasePhase):
         room.speaking_state.order = [p.id for p in alive_players]
         room.speaking_state.current_index = 0
 
+        logger.info(f"[狼人杀] 群 {room.group_id} 进入发言阶段，发言顺序共 {len(alive_players)} 人")
+
         # 确保全群禁言
         await BanService.set_group_whole_ban(room, True)
 
@@ -44,6 +48,9 @@ class DaySpeakingPhase(BasePhase):
         """发言超时"""
         current_speaker_id = room.speaking_state.current_speaker_id
         if current_speaker_id:
+            # 记录超时前的发言内容（如果有）
+            self._record_speech(room, current_speaker_id)
+
             # 取消管理员
             await BanService.remove_temp_admin(room, current_speaker_id)
 
@@ -84,16 +91,32 @@ class DaySpeakingPhase(BasePhase):
             return
 
         speech_list = room.speaking_state.current_speech
+        is_pk = room.phase == GamePhase.DAY_PK
+
+        logger.info(f"[记录发言] 玩家={player.display_name}, is_ai={player.is_ai}, speech_list长度={len(speech_list)}")
+
         if speech_list:
             full_speech = " ".join(speech_list)
             if len(full_speech) > 200:
                 full_speech = full_speech[:200] + "..."
 
-            phase_tag = "💬PK发言" if room.phase == GamePhase.DAY_PK else "💬发言"
+            phase_tag = "💬PK发言" if is_pk else "💬发言"
             room.log(f"{phase_tag}：{player.display_name} - {full_speech}")
+
+            logger.info(f"[记录发言] 开始同步发言到AI上下文，内容={full_speech[:50]}...")
+
+            # 同步发言到所有AI玩家上下文
+            ai_sync_count = 0
+            for p in room.players.values():
+                if p.is_ai and p.ai_context:
+                    p.ai_context.add_speech(player.display_name, full_speech, is_pk)
+                    ai_sync_count += 1
+
+            logger.info(f"[记录发言] 完成，已同步到 {ai_sync_count} 个AI")
         else:
-            phase_tag = "💬PK发言" if room.phase == GamePhase.DAY_PK else "💬发言"
+            phase_tag = "💬PK发言" if is_pk else "💬发言"
             room.log(f"{phase_tag}：{player.display_name} - [未捕获到文字内容]")
+            logger.warning(f"[记录发言] ⚠️ {player.display_name} 的发言内容为空！")
 
         # 清空缓存
         room.speaking_state.current_speech.clear()
@@ -102,8 +125,11 @@ class DaySpeakingPhase(BasePhase):
         """下一个发言者"""
         speaking = room.speaking_state
 
+        logger.info(f"[狼人杀] 群 {room.group_id} _next_speaker: index={speaking.current_index}, total={len(speaking.order)}")
+
         # 检查是否所有人都发言完毕
         if speaking.current_index >= len(speaking.order):
+            logger.info(f"[狼人杀] 群 {room.group_id} 所有人发言完毕，进入投票阶段")
             await self._enter_vote_phase(room)
             return
 
@@ -112,22 +138,79 @@ class DaySpeakingPhase(BasePhase):
         speaking.current_speaker_id = current_id
         speaking.current_speech.clear()
 
+        player = room.get_player(current_id)
+        if not player:
+            logger.warning(f"[狼人杀] 群 {room.group_id} 找不到玩家 {current_id}，跳过")
+            speaking.current_index += 1
+            await self._next_speaker(room)
+            return
+
+        logger.info(f"[狼人杀] 群 {room.group_id} 轮到 {player.display_name} 发言 (index={speaking.current_index}, is_ai={player.is_ai})")
+
+        # 如果是AI玩家，自动发言
+        if player.is_ai:
+            await self._handle_ai_speech(room, player, is_pk=False)
+            return
+
         # 设为临时管理员
         await BanService.set_temp_admin(room, current_id)
 
         # 发送提示
-        player = room.get_player(current_id)
-        if player:
-            await self.message_service.send_group_at_message(
-                room, player,
-                f" 现在轮到你发言\n\n"
-                f"⏰ 发言时间：2分钟\n"
-                f"💡 发言完毕后请使用：/发言完毕\n\n"
-                f"进度：{speaking.current_index + 1}/{len(speaking.order)}"
-            )
+        await self.message_service.send_group_at_message(
+            room, player,
+            f" 现在轮到你发言\n\n"
+            f"⏰ 发言时间：2分钟\n"
+            f"💡 发言完毕后请使用：/发言完毕\n\n"
+            f"进度：{speaking.current_index + 1}/{len(speaking.order)}"
+        )
 
         # 启动定时器
         await self.start_timer(room)
+
+    async def _handle_ai_speech(self, room: "GameRoom", player, is_pk: bool = False) -> None:
+        """处理AI玩家发言"""
+        try:
+            ai_service = self.game_manager.ai_player_service
+
+            # 更新AI上下文
+            ai_service.update_ai_context(player, room)
+
+            # 延迟模拟思考
+            await asyncio.sleep(random.uniform(3, 8))
+
+            # 生成发言
+            speech = await ai_service.generate_speech(player, room, is_pk)
+
+            # 发送发言到群
+            phase_tag = "[PK发言]" if is_pk else ""
+            await self.message_service.send_group_message(
+                room, f"{phase_tag}{player.display_name}：{speech}"
+            )
+
+            # 记录发言（会自动同步到所有AI上下文）
+            room.speaking_state.current_speech = [speech]
+            self._record_speech(room, player.id)
+
+            logger.info(f"[狼人杀] AI玩家 {player.name} 发言: {speech[:50]}...")
+
+        except Exception as e:
+            # 异常时使用默认发言，确保流程不中断
+            logger.error(f"[狼人杀] AI玩家 {player.name} 发言异常: {e}")
+            default_speech = "我先听听大家怎么说吧"
+            phase_tag = "[PK发言]" if is_pk else ""
+            try:
+                await self.message_service.send_group_message(
+                    room, f"{phase_tag}{player.display_name}：{default_speech}"
+                )
+            except Exception as send_error:
+                logger.error(f"[狼人杀] 发送默认发言失败: {send_error}")
+
+        # 无论成功失败，都要继续下一位（放在 finally 确保执行）
+        room.speaking_state.current_index += 1
+        if is_pk:
+            await self._next_pk_speaker(room)
+        else:
+            await self._next_speaker(room)
 
     async def _next_pk_speaker(self, room: "GameRoom") -> None:
         """下一个PK发言者"""
@@ -144,19 +227,28 @@ class DaySpeakingPhase(BasePhase):
         speaking.current_speaker_id = current_id
         speaking.current_speech.clear()
 
+        player = room.get_player(current_id)
+        if not player:
+            speaking.current_index += 1
+            await self._next_pk_speaker(room)
+            return
+
+        # 如果是AI玩家，自动发言
+        if player.is_ai:
+            await self._handle_ai_speech(room, player, is_pk=True)
+            return
+
         # 设为临时管理员
         await BanService.set_temp_admin(room, current_id)
 
         # 发送提示
-        player = room.get_player(current_id)
-        if player:
-            await self.message_service.send_group_at_message(
-                room, player,
-                f" PK发言：现在轮到你发言\n\n"
-                f"⏰ 发言时间：2分钟\n"
-                f"💡 发言完毕后请使用：/发言完毕\n\n"
-                f"进度：{speaking.current_index + 1}/{len(pk_players)}"
-            )
+        await self.message_service.send_group_at_message(
+            room, player,
+            f" PK发言：现在轮到你发言\n\n"
+            f"⏰ 发言时间：2分钟\n"
+            f"💡 发言完毕后请使用：/发言完毕\n\n"
+            f"进度：{speaking.current_index + 1}/{len(pk_players)}"
+        )
 
         # 启动定时器
         await self.start_timer(room)

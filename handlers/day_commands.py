@@ -167,10 +167,16 @@ class DayCommandHandler(BaseCommandHandler):
         # 记录日志
         voter = room.get_player(player_id)
         target = room.get_player(target_id)
-        if room.vote_state.is_pk_vote:
+        is_pk = room.vote_state.is_pk_vote
+        if is_pk:
             room.log(f"🗳️ PK投票：{voter.display_name} 投给 {target.display_name}")
         else:
             room.log(f"🗳️ {voter.display_name} 投票给 {target.display_name}")
+
+        # 同步投票到所有AI玩家上下文
+        for p in room.players.values():
+            if p.is_ai and p.ai_context:
+                p.ai_context.add_vote(voter.display_name, target.display_name, is_pk)
 
         yield event.plain_result(
             f"✅ 投票成功！当前已投票 {len(room.vote_state.day_votes)}/{room.alive_count} 人"
@@ -193,8 +199,33 @@ class DayCommandHandler(BaseCommandHandler):
             return
 
         player_id = event.get_sender_id()
+        message_text = event.get_message_outline()
 
-        # 检查阶段
+        # 排除命令
+        if message_text.startswith("/"):
+            return
+
+        if not message_text.strip():
+            return
+
+        # 投票阶段：监听所有人的讨论
+        if room.phase == GamePhase.DAY_VOTE:
+            player = room.get_player(player_id)
+            if player and player.is_alive:
+                # 记录到投票讨论
+                if not hasattr(room, 'vote_discussion'):
+                    room.vote_discussion = []
+                room.vote_discussion.append({
+                    "player": player.display_name,
+                    "content": message_text[:100]  # 限制长度
+                })
+                # 同步投票讨论到所有AI上下文（实时）
+                for p in room.players.values():
+                    if p.is_ai and p.ai_context:
+                        p.ai_context.add_event(f"[投票讨论] {player.display_name}：{message_text[:80]}")
+            return
+
+        # 发言阶段和遗言阶段：只记录当前发言者
         if room.phase not in (GamePhase.DAY_SPEAKING, GamePhase.DAY_PK, GamePhase.LAST_WORDS):
             return
 
@@ -206,13 +237,5 @@ class DayCommandHandler(BaseCommandHandler):
             if room.speaking_state.current_speaker_id != player_id:
                 return
 
-        # 获取消息内容
-        message_text = event.get_message_outline()
-
-        # 排除命令
-        if message_text.startswith("/"):
-            return
-
-        # 记录
-        if message_text.strip():
-            room.speaking_state.current_speech.append(message_text)
+        # 记录发言
+        room.speaking_state.current_speech.append(message_text)

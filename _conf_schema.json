@@ -1,4 +1,10 @@
 {
+    "ai_player_model": {
+        "description": "AI玩家模型提供商ID",
+        "hint": "AI玩家发言、投票等决策使用的模型。留空使用默认模型。可在AstrBot的LLM配置中查看已配置的模型ID",
+        "type": "string",
+        "default": ""
+    },
     "enable_ai_review": {
         "description": "是否启用AI复盘功能",
         "hint": "关闭后游戏结束不会生成AI复盘报告",

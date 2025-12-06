@@ -7,6 +7,7 @@
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.core.star.filter.permission import PermissionType
 
 from .models import GameConfig
 from .services import GameManager
@@ -18,7 +19,7 @@ from .handlers import (
 )
 
 
-@register("astrbot_plugin_werewolf", "miao", "狼人杀游戏（3狼3神3平民+AI复盘+图片生成）", "v2.2.0")
+@register("astrbot_plugin_werewolf", "miao", "狼人杀游戏（3狼3神3平民+AI复盘+AI玩家）", "v2.3.0")
 class WerewolfPlugin(Star):
     """狼人杀插件"""
 
@@ -80,6 +81,20 @@ class WerewolfPlugin(Star):
     async def join_room(self, event: AstrMessageEvent):
         """加入游戏"""
         async for result in self.room_handler.join_room(event):
+            yield result
+
+    @filter.permission_type(PermissionType.ADMIN)
+    @filter.regex(r"^[/／]?(.+?)加入$")
+    async def ai_join_room(self, event: AstrMessageEvent):
+        """AI玩家加入游戏（管理员专用），支持格式：/小咪加入 或 小咪加入"""
+        async for result in self.room_handler.ai_join_room(event):
+            yield result
+
+    @filter.permission_type(PermissionType.ADMIN)
+    @filter.command("踢出AI")
+    async def kick_ai_player(self, event: AstrMessageEvent):
+        """踢出AI玩家（管理员专用）"""
+        async for result in self.room_handler.kick_ai_player(event):
             yield result
 
     @filter.command("开始游戏")

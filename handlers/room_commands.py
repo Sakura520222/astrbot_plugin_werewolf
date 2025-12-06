@@ -1,9 +1,10 @@
 """房间管理命令"""
+import re
 from typing import TYPE_CHECKING, AsyncGenerator
 from astrbot.api.event import AstrMessageEvent
 
 from .base import BaseCommandHandler
-from ..models import GamePhase
+from ..models import GamePhase, AIPlayerConfig
 
 if TYPE_CHECKING:
     from ..services import GameManager
@@ -11,6 +12,9 @@ if TYPE_CHECKING:
 
 class RoomCommandHandler(BaseCommandHandler):
     """房间管理命令处理器"""
+
+    # AI玩家名称黑名单（避免与命令冲突）
+    AI_NAME_BLACKLIST = {"加入房间", "创建房间", "开始游戏", "结束游戏", "投票", "办掉", "验人", "救人", "毒人", "开枪", "房间"}
 
     async def create_room(self, event: AstrMessageEvent) -> AsyncGenerator:
         """创建房间"""
@@ -43,6 +47,7 @@ class RoomCommandHandler(BaseCommandHandler):
             f"• 猎人：被狼杀或投票放逐可开枪，被毒不能开枪\n"
             f"• 游戏结束后生成AI复盘报告\n\n"
             f"💡 使用 /加入房间 来参与游戏\n"
+            f"🤖 使用 /（机器人名字）加入 让AI玩家加入\n"
             f"👥 {config.total_players}人齐全后，房主使用 /开始游戏"
         )
 
@@ -124,10 +129,10 @@ class RoomCommandHandler(BaseCommandHandler):
         # 开始游戏
         await self.game_manager.start_game(room)
 
-        # 启动狼人阶段定时器
+        # 进入狼人行动阶段（会根据是否有人类狼人决定处理逻辑）
         from ..phases import NightWolfPhase
         wolf_phase = NightWolfPhase(self.game_manager)
-        await wolf_phase.start_timer(room)
+        await wolf_phase.on_enter(room)
 
     async def end_game(self, event: AstrMessageEvent) -> AsyncGenerator:
         """强制结束游戏"""
@@ -147,3 +152,128 @@ class RoomCommandHandler(BaseCommandHandler):
 
         await self.game_manager.cleanup_room(group_id)
         yield event.plain_result("✅ 游戏已强制结束！")
+
+    async def ai_join_room(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """AI玩家加入房间"""
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("⚠️ 请在群聊中使用此命令！")
+            return
+
+        room = self.game_manager.get_room(group_id)
+        if not room:
+            yield event.plain_result("❌ 当前群未创建房间！请使用 /创建房间")
+            return
+
+        if room.phase != GamePhase.WAITING:
+            yield event.plain_result("❌ 游戏已开始，无法加入！")
+            return
+
+        if room.is_full:
+            yield event.plain_result(f"❌ 房间已满（{room.player_count}/{self.game_manager.config.total_players}）！")
+            return
+
+        # 从消息中提取AI名称
+        message_text = event.message_str.strip()
+        # 匹配 /xxx加入 或 xxx加入 格式
+        match = re.match(r'^[/／]?(.+?)加入$', message_text)
+        if not match:
+            yield event.plain_result("❌ 无法识别AI名称！\n使用格式：/小咪加入")
+            return
+
+        ai_name = match.group(1).strip()
+
+        # 验证名称
+        if not ai_name:
+            yield event.plain_result("❌ AI名称不能为空！")
+            return
+
+        if len(ai_name) > 10:
+            yield event.plain_result("❌ AI名称不能超过10个字符！")
+            return
+
+        if ai_name in self.AI_NAME_BLACKLIST:
+            yield event.plain_result(f"❌ '{ai_name}' 是保留名称，请换一个！")
+            return
+
+        # 检查是否已有同名AI
+        ai_player_id = f"ai_{ai_name}"
+        if room.is_player_in_room(ai_player_id):
+            yield event.plain_result(f"⚠️ AI玩家 {ai_name} 已经在游戏中了！")
+            return
+
+        # 创建AI玩家配置（使用全局配置的模型）
+        ai_config = AIPlayerConfig(
+            name=ai_name,
+            model_id=self.game_manager.config.ai_player_model
+        )
+
+        # 添加AI玩家
+        ai_player = self.game_manager.add_ai_player(room, ai_name, ai_config)
+
+        yield event.plain_result(
+            f"{ai_player.name} 加入游戏！\n\n"
+            f"当前人数：{room.player_count}/{self.game_manager.config.total_players}"
+        )
+
+    async def kick_ai_player(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """踢出AI玩家"""
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("❌ 请在群聊中使用此命令！")
+            return
+
+        room = self.game_manager.get_room(group_id)
+        if not room:
+            yield event.plain_result("❌ 当前群没有创建的房间！")
+            return
+
+        if room.phase != GamePhase.WAITING:
+            yield event.plain_result("❌ 游戏已开始，无法踢出玩家！")
+            return
+
+        # 获取要踢出的AI名称
+        target_str = ""
+        for seg in event.get_messages():
+            if hasattr(seg, 'text'):
+                # 提取命令后的参数
+                text = seg.text.strip()
+                match = re.match(r'^[/／]?踢出AI\s*(.*)$', text)
+                if match:
+                    target_str = match.group(1).strip()
+                    break
+
+        if not target_str:
+            # 列出所有AI玩家
+            ai_players = [p for p in room.players.values() if p.is_ai]
+            if not ai_players:
+                yield event.plain_result("❌ 当前房间没有AI玩家！")
+                return
+
+            ai_list = "\n".join([f"  • {p.name}" for p in ai_players])
+            yield event.plain_result(
+                f"❌ 请指定要踢出的AI名称！\n\n"
+                f"当前AI玩家：\n{ai_list}\n\n"
+                f"使用格式：/踢出AI 小咪"
+            )
+            return
+
+        # 查找AI玩家
+        ai_player_id = f"ai_{target_str}"
+        player = room.get_player(ai_player_id)
+
+        if not player:
+            yield event.plain_result(f"❌ 未找到AI玩家：{target_str}")
+            return
+
+        if not player.is_ai:
+            yield event.plain_result(f"❌ {target_str} 不是AI玩家！")
+            return
+
+        # 移除玩家
+        del room.players[ai_player_id]
+
+        yield event.plain_result(
+            f"✅ AI玩家 {target_str} 已被踢出！\n\n"
+            f"当前人数：{room.player_count}/{self.game_manager.config.total_players}"
+        )
