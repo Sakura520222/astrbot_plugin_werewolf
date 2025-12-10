@@ -4,6 +4,7 @@ from .roles import ROLE_SOUL_SETTINGS, PERSONALITY_TEMPLATES
 from .strategies import SPEECH_TIPS, VOTE_TIPS, PK_TIPS, LAST_WORDS_TIPS
 from .templates import ROLE_PROMPTS
 from .events import PEACEFUL_NIGHT_TIPS, DOUBLE_DEATH_TIPS, PERSONALITY_NAMES
+from .rules import GAME_RULES
 from .tactics import (
     SITUATION_TEMPLATE,
     TACTICAL_DIRECTIVES,
@@ -16,6 +17,8 @@ __all__ = [
     # 基础协议
     'ANTI_HALLUCINATION_PROTOCOL',
     'HUMAN_STYLE_TIPS',
+    # 游戏规则
+    'GAME_RULES',
     # 角色设定
     'ROLE_SOUL_SETTINGS',
     'PERSONALITY_TEMPLATES',

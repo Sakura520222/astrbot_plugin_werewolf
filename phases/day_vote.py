@@ -120,67 +120,74 @@ class DayVotePhase(BasePhase):
             if not player.is_ai:
                 continue
 
-            # 更新AI上下文
-            ai_service.update_ai_context(player, room)
-
-            # 将投票阶段讨论加入上下文
-            if hasattr(room, 'vote_discussion') and room.vote_discussion:
-                for msg in room.vote_discussion[-20:]:
-                    if player.ai_context:
-                        player.ai_context.add_event(f"投票讨论 {msg['player']}：{msg['content']}")
-
-            # 延迟模拟思考
-            await asyncio.sleep(random.uniform(2, 5))
-
-            # AI同时生成讨论和投票决策
-            discussion, target_number = await ai_service.decide_vote(player, room, is_pk, pk_candidates)
             pk_tag = "PK" if is_pk else ""
 
-            # 先发讨论
-            if discussion:
-                await self.message_service.send_group_message(
-                    room, f"{player.display_name}：{discussion}"
-                )
-                # 同步投票讨论到所有AI上下文
-                for p in room.players.values():
-                    if p.is_ai and p.ai_context:
-                        p.ai_context.add_event(f"投票讨论 {player.display_name}：{discussion[:80]}")
+            try:
+                # 更新AI上下文
+                ai_service.update_ai_context(player, room)
 
-            await asyncio.sleep(random.uniform(0.5, 1))
+                # 将投票阶段讨论加入上下文（确保AI看到所有讨论）
+                if hasattr(room, 'vote_discussion') and room.vote_discussion:
+                    for msg in room.vote_discussion:  # 全部讨论
+                        if player.ai_context:
+                            # 使用专门的投票讨论字段
+                            player.ai_context.add_vote_discussion(msg['player'], msg['content'])
 
-            if target_number:
-                target_player = room.get_player_by_number(target_number)
-                if target_player and target_player.is_alive and target_player.id != player.id:
-                    room.vote_state.day_votes[player.id] = target_player.id
+                # AI同时生成讨论和投票决策
+                discussion, target_number = await ai_service.decide_vote(player, room, is_pk, pk_candidates)
 
-                    # 发送群消息显示投票
+                # 先发讨论
+                if discussion:
                     await self.message_service.send_group_message(
-                        room, f"🗳️ {player.display_name} 投票给 {target_player.display_name}"
+                        room, f"{player.display_name}：{discussion}"
                     )
-
-                    # 记录日志
-                    room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）投给 {target_player.display_name}")
-                    logger.info(f"[狼人杀] AI玩家 {player.name} 投票给 {target_player.display_name}")
-
-                    # 记录到所有AI上下文
+                    # 同步投票讨论到所有AI上下文（使用专门的投票讨论字段）
                     for p in room.players.values():
                         if p.is_ai and p.ai_context:
-                            p.ai_context.add_vote(player.display_name, target_player.display_name, is_pk)
+                            p.ai_context.add_vote_discussion(player.display_name, discussion[:120])
+
+                if target_number:
+                    target_player = room.get_player_by_number(target_number)
+                    if target_player and target_player.is_alive and target_player.id != player.id:
+                        room.vote_state.day_votes[player.id] = target_player.id
+
+                        # 发送群消息显示投票
+                        await self.message_service.send_group_message(
+                            room, f"🗳️ {player.display_name} 投票给 {target_player.display_name}"
+                        )
+
+                        # 记录日志
+                        room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）投给 {target_player.display_name}")
+                        logger.info(f"[狼人杀] AI玩家 {player.name} 投票给 {target_player.display_name}")
+
+                        # 记录到所有AI上下文
+                        for p in room.players.values():
+                            if p.is_ai and p.ai_context:
+                                p.ai_context.add_vote(player.display_name, target_player.display_name, is_pk)
+                    else:
+                        # 目标无效，当作弃票
+                        room.vote_state.day_votes[player.id] = "ABSTAIN"
+                        await self.message_service.send_group_message(
+                            room, f"🗳️ {player.display_name} 选择弃票"
+                        )
+                        room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票")
                 else:
-                    # 目标无效，当作弃票
+                    # AI选择弃票 - 记录为投给"ABSTAIN"表示弃票
                     room.vote_state.day_votes[player.id] = "ABSTAIN"
                     await self.message_service.send_group_message(
                         room, f"🗳️ {player.display_name} 选择弃票"
                     )
                     room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票")
-            else:
-                # AI选择弃票 - 记录为投给"ABSTAIN"表示弃票
+                    logger.info(f"[狼人杀] AI玩家 {player.name} 选择弃票")
+
+            except Exception as e:
+                # 单个AI投票失败不影响其他AI，记录弃票
+                logger.error(f"[狼人杀] AI玩家 {player.name} 投票异常: {e}")
                 room.vote_state.day_votes[player.id] = "ABSTAIN"
                 await self.message_service.send_group_message(
                     room, f"🗳️ {player.display_name} 选择弃票"
                 )
-                room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票")
-                logger.info(f"[狼人杀] AI玩家 {player.name} 选择弃票")
+                room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票（异常）")
 
     async def _check_all_voted(self, room: "GameRoom") -> bool:
         """检查是否所有人都投票了"""
@@ -262,79 +269,84 @@ class DayVotePhase(BasePhase):
             if not player.is_ai:
                 continue
 
-            # 更新AI上下文，包含投票阶段的讨论
-            ai_service.update_ai_context(player, room)
+            try:
+                # 更新AI上下文，包含投票阶段的讨论
+                ai_service.update_ai_context(player, room)
 
-            # 将投票阶段讨论加入上下文
-            if hasattr(room, 'vote_discussion') and room.vote_discussion:
-                for msg in room.vote_discussion[-20:]:  # 最近20条
-                    if player.ai_context:
-                        player.ai_context.add_event(f"投票讨论 {msg['player']}：{msg['content']}")
+                # 将投票阶段讨论加入上下文（确保AI看到所有讨论）
+                if hasattr(room, 'vote_discussion') and room.vote_discussion:
+                    for msg in room.vote_discussion:  # 全部讨论
+                        if player.ai_context:
+                            # 使用专门的投票讨论字段
+                            player.ai_context.add_vote_discussion(msg['player'], msg['content'])
 
-            # 延迟模拟思考
-            await asyncio.sleep(random.uniform(1, 3))
+                # AI同时生成讨论和投票决策（确保一致性）
+                discussion, target_number = await ai_service.decide_vote(player, room, is_pk, pk_candidates)
 
-            # AI同时生成讨论和投票决策（确保一致性）
-            discussion, target_number = await ai_service.decide_vote(player, room, is_pk, pk_candidates)
-
-            # 先发表讨论
-            if discussion:
-                await self.message_service.send_group_message(
-                    room, f"{player.display_name}：{discussion}"
-                )
-                logger.info(f"[狼人杀] AI玩家 {player.name} 投票讨论: {discussion[:50]}...")
-
-            # 延迟后投票
-            await asyncio.sleep(random.uniform(1, 2))
-
-            pk_tag = "PK" if is_pk else ""
-
-            if target_number:
-                target_player = room.get_player_by_number(target_number)
-                if target_player and target_player.is_alive and target_player.id != player.id:
-                    room.vote_state.day_votes[player.id] = target_player.id
-
-                    # 发送群消息显示投票
+                # 先发表讨论
+                if discussion:
                     await self.message_service.send_group_message(
-                        room, f"🗳️ {player.display_name} 投票给 {target_player.display_name}"
+                        room, f"{player.display_name}：{discussion}"
                     )
-
-                    # 记录日志
-                    room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）投给 {target_player.display_name}")
-                    logger.info(f"[狼人杀] AI玩家 {player.name} 投票给 {target_player.display_name}")
-
-                    # 记录到所有AI上下文
+                    logger.info(f"[狼人杀] AI玩家 {player.name} 投票讨论: {discussion[:50]}...")
+                    # 同步投票讨论到所有AI上下文（使用专门的投票讨论字段）
                     for p in room.players.values():
                         if p.is_ai and p.ai_context:
-                            p.ai_context.add_vote(player.display_name, target_player.display_name, is_pk)
+                            p.ai_context.add_vote_discussion(player.display_name, discussion[:120])
 
-                    # 检查是否所有人都投完了
-                    if await self._check_all_voted(room):
-                        return
+                pk_tag = "PK" if is_pk else ""
+
+                if target_number:
+                    target_player = room.get_player_by_number(target_number)
+                    if target_player and target_player.is_alive and target_player.id != player.id:
+                        room.vote_state.day_votes[player.id] = target_player.id
+
+                        # 发送群消息显示投票
+                        await self.message_service.send_group_message(
+                            room, f"🗳️ {player.display_name} 投票给 {target_player.display_name}"
+                        )
+
+                        # 记录日志
+                        room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）投给 {target_player.display_name}")
+                        logger.info(f"[狼人杀] AI玩家 {player.name} 投票给 {target_player.display_name}")
+
+                        # 记录到所有AI上下文
+                        for p in room.players.values():
+                            if p.is_ai and p.ai_context:
+                                p.ai_context.add_vote(player.display_name, target_player.display_name, is_pk)
+
+                        # 检查是否所有��都投完了
+                        if await self._check_all_voted(room):
+                            return
+                    else:
+                        # 目标无效（已死亡/投自己/不存在），当作弃票
+                        room.vote_state.day_votes[player.id] = "ABSTAIN"
+                        await self.message_service.send_group_message(
+                            room, f"🗳️ {player.display_name} 选择弃票"
+                        )
+                        room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票（目标无效）")
+                        logger.info(f"[狼人杀] AI玩家 {player.name} 投票目标无效，转为弃票")
+
+                        # 检查是否所有人都投完了
+                        if await self._check_all_voted(room):
+                            return
                 else:
-                    # 目标无效（已死亡/投自己/不存在），当作弃票
+                    # AI选择弃票 - 记录为投给"ABSTAIN"表示弃票
                     room.vote_state.day_votes[player.id] = "ABSTAIN"
                     await self.message_service.send_group_message(
                         room, f"🗳️ {player.display_name} 选择弃票"
                     )
-                    room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票（目标无效）")
-                    logger.info(f"[狼人杀] AI玩家 {player.name} 投票目标无效，转为弃票")
+                    room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票")
+                    logger.info(f"[狼人杀] AI玩家 {player.name} 选择弃票")
 
                     # 检查是否所有人都投完了
                     if await self._check_all_voted(room):
                         return
-            else:
-                # AI选择弃票 - 记录为投给"ABSTAIN"表示弃票
-                room.vote_state.day_votes[player.id] = "ABSTAIN"
-                await self.message_service.send_group_message(
-                    room, f"🗳️ {player.display_name} 选择弃票"
-                )
-                room.log(f"🗳️ {pk_tag}投票：{player.display_name}（AI）弃票")
-                logger.info(f"[狼人杀] AI玩家 {player.name} 选择弃票")
 
-                # 检查是否所有人都投完了
-                if await self._check_all_voted(room):
-                    return
+            except Exception as e:
+                # 单个AI失败不影响其他AI
+                logger.error(f"[狼人杀] AI玩家 {player.name} 投票异常: {e}")
+                room.vote_state.day_votes[player.id] = "ABSTAIN"
 
     async def on_timeout(self, room: "GameRoom") -> None:
         """投票超时"""
@@ -361,6 +373,9 @@ class DayVotePhase(BasePhase):
         """处理投票结果"""
         logger.info(f"[狼人杀] 群 {room.group_id} 开始处理投票结果，当前阶段: {room.phase}")
 
+        # 先保存是否是PK投票（process_day_vote 可能会清除这个状态）
+        was_pk_vote = room.vote_state.is_pk_vote
+
         # 先统计投票，用于生成图片（排除弃票）
         votes = room.vote_state.day_votes
         logger.info(f"[狼人杀] 群 {room.group_id} 投票数据: {len(votes)} 票")
@@ -383,21 +398,21 @@ class DayVotePhase(BasePhase):
 
         if is_tie:
             # 平票情况 - 发送投票结果图片（无人被放逐）
-            is_pk = room.vote_state.is_pk_vote
+            # 使用保存的 was_pk_vote，因为 process_day_vote 可能已经清除了状态
             await self.message_service.announce_vote_result(
-                room, vote_counts, voters_map, None, is_pk
+                room, vote_counts, voters_map, None, was_pk_vote
             )
 
             # 同步平票信息到AI上下文
             pk_names = [room.get_player(pid).display_name for pid in room.vote_state.pk_players if room.get_player(pid)]
             for p in room.players.values():
                 if p.is_ai and p.ai_context:
-                    if is_pk:
+                    if was_pk_vote:
                         p.ai_context.add_event(f"PK投票平票，无人出局")
                     else:
                         p.ai_context.add_event(f"投票平票，{', '.join(pk_names)} 进入PK")
 
-            if not is_pk:
+            if not was_pk_vote:
                 # 第一次平票，进入PK
                 from .day_speaking import DaySpeakingPhase
                 speaking_phase = DaySpeakingPhase(self.game_manager)
@@ -423,17 +438,16 @@ class DayVotePhase(BasePhase):
             await self._enter_night(room)
             return
 
-        # 记录日志
-        is_pk = room.vote_state.is_pk_vote
-        room.log(f"📊 {'PK' if is_pk else ''}投票结果：{exiled_player.display_name} 被放逐")
+        # 记录日志（这里用 was_pk_vote 因为状态可能已被清除）
+        room.log(f"📊 {'PK' if was_pk_vote else ''}投票结果：{exiled_player.display_name} 被放逐")
 
         # 发送投票结果
         await self.message_service.announce_vote_result(
-            room, vote_counts, voters_map, exiled_player.display_name, is_pk
+            room, vote_counts, voters_map, exiled_player.display_name, was_pk_vote
         )
 
         # 公告放逐结果
-        await self.message_service.announce_exile(room, exiled_player.display_name, is_pk)
+        await self.message_service.announce_exile(room, exiled_player.display_name, was_pk_vote)
 
         # 同步放逐结果到AI上下文
         for p in room.players.values():

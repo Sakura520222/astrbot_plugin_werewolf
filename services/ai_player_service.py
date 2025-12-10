@@ -1222,17 +1222,22 @@ class AIPlayerService:
 
                 if response.result_chain:
                     result = response.result_chain.get_plain_text().strip()
-                    logger.info(f"[狼人杀AI] {player.name} 决策: {result[:100]}")
-                    return result
+                    if result:  # 只有非空结果才返回
+                        logger.info(f"[狼人杀AI] {player.name} 决策: {result[:100]}")
+                        return result
+                    else:
+                        logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用返回空内容")
+                else:
+                    logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用返回空响应")
 
             except asyncio.TimeoutError:
                 logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用超时（{timeout}秒）")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
             except Exception as e:
                 logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用失败: {e}")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
+
+            # 统一在循环末尾等待重试
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
 
         logger.error(f"[狼人杀AI] {player.name} 所有重试均失败")
         return None

@@ -56,6 +56,9 @@ class AIPlayerContext:
     # 狼人密谋记录（仅狼人可见）
     wolf_chat_messages: List[dict] = field(default_factory=list)  # [{sender, content, round}, ...]
 
+    # 投票期间讨论记录（所有人可见，投票前的重要参考）
+    vote_discussions: List[dict] = field(default_factory=list)  # [{player, content, round}, ...]
+
     def add_wolf_chat(self, sender_name: str, content: str, round_num: int) -> None:
         """添加狼人密谋消息"""
         self.wolf_chat_messages.append({
@@ -94,6 +97,14 @@ class AIPlayerContext:
             "round": self.current_round
         })
 
+    def add_vote_discussion(self, player_name: str, content: str) -> None:
+        """添加投票期间的讨论"""
+        self.vote_discussions.append({
+            "player": player_name,
+            "content": content,
+            "round": self.current_round
+        })
+
     def update_alive_players(self, alive_list: List[str], dead_list: List[str]) -> None:
         """更新存活玩家列表"""
         self.alive_players = alive_list
@@ -101,7 +112,14 @@ class AIPlayerContext:
 
     def to_prompt_context(self) -> str:
         """将上下文转换为提示词格式"""
+        # 在函数内部导入避免循环依赖
+        from ..services.ai.prompts import GAME_RULES
+
         lines = []
+
+        # 📜 游戏规则说明（让所有AI了解基本规则，避免质疑女巫等角色的能力）
+        lines.append(GAME_RULES)
+        lines.append("")
 
         # 🌅 首日特殊声明（防止AI产生虚假记忆）
         if self.current_round == 1 and len(self.speeches) == 0:
@@ -215,5 +233,15 @@ class AIPlayerContext:
                     lines.append(f"  {prefix}{vote['voter']} → {vote['target']}")
 
             lines.append("💡 思考：投同一人的可能是同阵营，保人的要警惕！")
+
+        # 投票期间讨论（重要！这是投票前的最新观点）
+        if self.vote_discussions:
+            current_round_discussions = [d for d in self.vote_discussions if d.get("round") == self.current_round]
+            if current_round_discussions:
+                lines.append(f"\n💬💬💬【投票期间讨论 - 必读！这是大家投票前的最新观点！】💬💬💬")
+                lines.append("⚠️ 以下是在投票阶段，大家针对本次投票发表的看法和讨论：")
+                for disc in current_round_discussions:  # 显示全部
+                    lines.append(f"  💭 {disc['player']}：{disc['content'][:120]}")
+                lines.append("💡 分析：谁在带节奏？谁在保谁？谁在攻击谁？这些讨论会影响投票结果！")
 
         return "\n".join(lines)

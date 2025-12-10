@@ -83,6 +83,24 @@ class WerewolfPlugin(Star):
         async for result in self.room_handler.join_room(event):
             yield result
 
+    @filter.command("加人房间")
+    async def join_room_alias1(self, event: AstrMessageEvent):
+        """加入游戏（别名）"""
+        async for result in self.room_handler.join_room(event):
+            yield result
+
+    @filter.command("加入")
+    async def join_room_alias2(self, event: AstrMessageEvent):
+        """加入游戏（别名）"""
+        async for result in self.room_handler.join_room(event):
+            yield result
+
+    @filter.command("加人")
+    async def join_room_alias3(self, event: AstrMessageEvent):
+        """加入游戏（别名）"""
+        async for result in self.room_handler.join_room(event):
+            yield result
+
     @filter.permission_type(PermissionType.ADMIN)
     @filter.regex(r"^[/／]?(.+?)加入$")
     async def ai_join_room(self, event: AstrMessageEvent):

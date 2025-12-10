@@ -143,6 +143,9 @@ class GameManager:
         """开始游戏"""
         players_list = list(room.players.values())
 
+        # 随机打乱玩家顺序（确保编号随机分配）
+        random.shuffle(players_list)
+
         # 分配编号
         for index, player in enumerate(players_list, start=1):
             player.assign_number(index)
