@@ -65,11 +65,34 @@ class QueryCommandHandler(BaseCommandHandler):
             f"玩家列表：\n"
         )
 
-        for p in room.players:
+        for p in room.players.values():
             status_icon = "✅" if p.is_alive else "💀"
-            status_text += f"  {status_icon} {p.number}号 - {p.nickname or f'玩家{p.number}'}\n"
+            status_text += f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
 
         yield event.plain_result(status_text)
+
+    async def show_player_numbers(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """查看所有玩家的编号"""
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("❌ 请在群聊中使用此命令！")
+            return
+
+        room = self.game_manager.get_room(group_id)
+        if not room:
+            yield event.plain_result("❌ 当前群没有进行中的游戏！")
+            return
+
+        # 构建玩家编号列表
+        numbers_text = (
+            "🔢 玩家编号列表\n\n"
+        )
+
+        for p in room.players.values():
+            status_icon = "✅" if p.is_alive else "💀"
+            numbers_text += f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
+
+        yield event.plain_result(numbers_text)
 
     async def show_help(self, event: AstrMessageEvent) -> AsyncGenerator:
         """显示帮助（返回菜单图片）"""
@@ -95,6 +118,7 @@ class QueryCommandHandler(BaseCommandHandler):
                 "  /开始游戏 - 开始游戏（房主）\n"
                 "  /查角色 - 查看角色（私聊）\n"
                 "  /游戏状态 - 查看游戏状态\n"
+                "  /编号 - 查看所有玩家编号\n"
                 "  /结束游戏 - 结束游戏（房主）\n\n"
                 f"游戏命令（使用编号1-{config.total_players}）：\n"
                 "  /办掉 编号 - 狼人夜晚办掉（如：/办掉 1）\n"

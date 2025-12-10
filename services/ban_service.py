@@ -137,14 +137,26 @@ class BanService:
 
     @staticmethod
     async def set_player_numbers(room: "GameRoom") -> None:
-        """将所有玩家群昵称改为编号"""
+        """将所有玩家群昵称改为编号（仅人类玩家）"""
         for player in room.players.values():
+            # 跳过AI玩家（机器人不需要设置昵称）
+            if player.is_ai:
+                continue
+
+            # 保存原始昵称（如果还未保存）
+            if not player.original_card:
+                player.original_card = player.name
+
             new_card = f"{player.number}号"
             await BanService.set_group_card(room, player.id, new_card)
 
     @staticmethod
     async def restore_player_cards(room: "GameRoom") -> None:
-        """恢复所有玩家原始群昵称"""
+        """恢复所有玩家原始群昵称（仅人类玩家）"""
         for player in room.players.values():
+            # 跳过AI玩家（机器人不需要恢复昵称）
+            if player.is_ai:
+                continue
+
             if player.original_card:
                 await BanService.set_group_card(room, player.id, player.original_card)

@@ -7,7 +7,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-v4.5.0+-blue)](https://github.com/Soulter/AstrBot)
 [![Python](https://img.shields.io/badge/Python-3.8+-green)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-v3.0.0-red)](https://github.com/)
+[![Version](https://img.shields.io/badge/Version-v3.0.1-red)](https://github.com/)
 
 </div>
 
@@ -16,6 +16,13 @@
 > **⚠️ 重要提示**：此插件需要 Bot 账号是群主，因为需要设置管理员、使用禁言和修改群昵称功能。建议将 Bot 设为群主以确保所有功能正常运行。
 
 ## 📊 版本历史
+ ### v3.0.1 (2025-12-10) 
+  - 通过提示词优化，缓解了AI感知上下文和幻觉问题
+  - 加入了AI重试机制，防止个别输出错误导致其他AI无法发言
+  - 修复了无法正确改回昵称的Bug
+  - 优化了发言顺序逻辑（现在将随机打乱）
+  - 修复了平票出现无限循环且无法投票的问题
+  - 其他优化
 
  ### v3.0.0 (2025-12-06) 🎉 重大更新
   - 🤖 **AI 玩家**：人不够？AI 来凑！甚至支持全 AI「塞博斗蛐蛐」
@@ -23,8 +30,7 @@
     - AI 自动完成所有操作：夜晚行动、白天发言、投票决策
     - 支持人类 + AI 混合对局，或纯 AI 观赏局
     - `/踢出AI 编号` 可移除指定 AI 玩家
-  - 🐛 修复一些已知问题
-    
+
 ### v2.0.0 (2025-12-02)
 - 🔨 **架构重构**：从单文件 main.py 重构为模块化设计，代码结构更清晰
 - 🎴 **接口预留**：预留角色卡片生成接口，便于后续扩展

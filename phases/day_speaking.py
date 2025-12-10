@@ -175,9 +175,6 @@ class DaySpeakingPhase(BasePhase):
             # 更新AI上下文
             ai_service.update_ai_context(player, room)
 
-            # 延迟模拟思考
-            await asyncio.sleep(random.uniform(3, 8))
-
             # 生成发言
             speech = await ai_service.generate_speech(player, room, is_pk)
 

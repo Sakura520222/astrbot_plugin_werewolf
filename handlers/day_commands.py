@@ -219,10 +219,10 @@ class DayCommandHandler(BaseCommandHandler):
                     "player": player.display_name,
                     "content": message_text[:100]  # 限制长度
                 })
-                # 同步投票讨论到所有AI上下文（实时）
+                # 同步投票讨论到所有AI上下文（实时，使用专门的投票讨论字段）
                 for p in room.players.values():
                     if p.is_ai and p.ai_context:
-                        p.ai_context.add_event(f"[投票讨论] {player.display_name}：{message_text[:80]}")
+                        p.ai_context.add_vote_discussion(player.display_name, message_text[:120])
             return
 
         # 发言阶段和遗言阶段：只记录当前发言者
