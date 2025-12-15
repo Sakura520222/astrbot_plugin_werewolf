@@ -51,8 +51,13 @@ class BanService:
     @staticmethod
     async def unban_all_players(room: "GameRoom") -> None:
         """解除所有禁言"""
-        for player_id in list(room.banned_player_ids):
-            await BanService.unban_player(room, player_id)
+        # 遍历所有玩家，确保每个人都被解除禁言
+        for player in room.players.values():
+            # 跳过AI玩家
+            if player.is_ai:
+                continue
+            await BanService.unban_player(room, player.id)
+        # 清空记录
         room.banned_player_ids.clear()
 
     @staticmethod

@@ -277,3 +277,46 @@ class RoomCommandHandler(BaseCommandHandler):
             f"✅ AI玩家 {target_str} 已被踢出！\n\n"
             f"当前人数：{room.player_count}/{self.game_manager.config.total_players}"
         )
+
+    async def ai_fill_in(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """AI补位 - 自动添加AI玩家到房间中，直到房间满员"""
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("⚠️ 请在群聊中使用此命令！")
+            return
+
+        room = self.game_manager.get_room(group_id)
+        if not room:
+            yield event.plain_result("❌ 当前群未创建房间！请使用 /创建房间")
+            return
+
+        if room.phase != GamePhase.WAITING:
+            yield event.plain_result("❌ 游戏已开始，无法添加AI玩家！")
+            return
+
+        if room.is_full:
+            yield event.plain_result(f"✅ 房间已满（{room.player_count}/{self.game_manager.config.total_players}），无需补位！")
+            return
+
+        # 计算需要添加的AI玩家数量
+        needed_ai_count = self.game_manager.config.total_players - room.player_count
+        added_ai_names = []
+
+        for i in range(needed_ai_count):
+            # 生成AI名称（AI1, AI2, ...）
+            ai_name = f"AI{i + 1}"
+            # 创建AI玩家配置
+            ai_config = AIPlayerConfig(
+                name=ai_name,
+                model_id=self.game_manager.config.ai_player_model
+            )
+            # 添加AI玩家
+            ai_player = self.game_manager.add_ai_player(room, ai_name, ai_config)
+            added_ai_names.append(ai_player.name)
+
+        yield event.plain_result(
+            f"✅ AI补位成功！已添加 {needed_ai_count} 个AI玩家：\n\n" +
+            "\n".join([f"  • {name}" for name in added_ai_names]) + "\n\n" +
+            f"当前人数：{room.player_count}/{self.game_manager.config.total_players}\n\n" +
+            "👥 房间已满！房主可以使用 /开始游戏 开始游戏了！"
+        )
