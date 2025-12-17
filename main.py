@@ -115,10 +115,9 @@ class WerewolfPlugin(Star):
         async for result in self.room_handler.kick_ai_player(event):
             yield result
 
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("AI补位")
     async def ai_fill_in(self, event: AstrMessageEvent):
-        """AI补位 - 自动添加AI玩家到房间中，直到房间满员（管理员专用）"""
+        """AI补位 - 自动添加AI玩家到房间中，直到房间满员"""
         async for result in self.room_handler.ai_fill_in(event):
             yield result
 
