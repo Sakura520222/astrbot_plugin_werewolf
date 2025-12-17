@@ -51,14 +51,21 @@ class BanService:
     @staticmethod
     async def unban_all_players(room: "GameRoom") -> None:
         """解除所有禁言"""
+        logger.info(f"[狼人杀] 开始解除所有玩家禁言，当前房间有 {len(room.players)} 个玩家")
+        logger.info(f"[狼人杀] 当前被禁言的玩家列表: {room.banned_player_ids}")
+        
         # 遍历所有玩家，确保每个人都被解除禁言
         for player in room.players.values():
             # 跳过AI玩家
             if player.is_ai:
+                logger.info(f"[狼人杀] 跳过AI玩家 {player.id}")
                 continue
+            logger.info(f"[狼人杀] 尝试解除玩家 {player.id} 的禁言")
             await BanService.unban_player(room, player.id)
+        
         # 清空记录
         room.banned_player_ids.clear()
+        logger.info(f"[狼人杀] 解除所有玩家禁言完成")
 
     @staticmethod
     async def set_group_whole_ban(room: "GameRoom", enable: bool) -> bool:

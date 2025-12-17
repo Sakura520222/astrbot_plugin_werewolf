@@ -360,7 +360,7 @@ class DayVotePhase(BasePhase):
         if room.vote_state.day_votes:
             await self._process_vote_result(room)
         else:
-            # 无人投票，进入下一夜晚
+            # 无人投票，进入下一夜晚前先检查游戏是否结束
             room.log("📊 投票超时：无人投票，本轮无人出局")
             await self._enter_night(room)
 
@@ -485,6 +485,10 @@ class DayVotePhase(BasePhase):
 
     async def _enter_night(self, room: "GameRoom") -> None:
         """进入夜晚"""
+        # 进入夜晚前先检查游戏是否结束
+        if await self.game_manager.check_and_handle_victory(room):
+            return
+        
         from .phase_manager import PhaseManager
         phase_manager = PhaseManager(self.game_manager)
         await phase_manager.enter_night_phase(room)

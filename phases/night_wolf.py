@@ -96,8 +96,13 @@ class NightWolfPhase(BasePhase):
                 logger.info(f"[狼人杀] 群 {room.group_id} 全AI狼人处理：阶段已变更，跳过结算")
                 return
 
-            # 检查投票完成
-            await self._check_all_voted(room)
+            # 检查投票完成，如果未完成则使用兜底策略
+            alive_wolves = room.get_alive_werewolves()
+            voted_count = len(room.vote_state.night_votes)
+            if voted_count < len(alive_wolves):
+                logger.info(f"[狼人杀] 群 {room.group_id} 部分AI狼人未投票，使用兜底策略")
+                await self._fallback_wolf_vote(room)
+            await self._finish_and_next(room)
 
         except asyncio.TimeoutError:
             # 超时：检查是否还在狼人阶段
@@ -110,6 +115,9 @@ class NightWolfPhase(BasePhase):
 
         except asyncio.CancelledError:
             logger.info(f"[狼人杀] 群 {room.group_id} 全AI狼人处理任务被取消")
+            # 即使任务被取消，也要确保游戏能继续进行
+            if room.phase == GamePhase.NIGHT_WOLF:
+                await self._finish_and_next(room)
 
         except Exception as e:
             logger.error(f"[狼人杀] 群 {room.group_id} 全AI狼人处理异常: {e}")
@@ -224,8 +232,16 @@ class NightWolfPhase(BasePhase):
     async def _handle_ai_werewolf_vote(self, room: "GameRoom") -> None:
         """AI狼人投票：基于密谋信息决策击杀目标"""
         ai_service = self.game_manager.ai_player_service
+        alive_wolves = room.get_alive_werewolves()
 
-        for wolf in room.get_alive_werewolves():
+        # 收集所有非狼人玩家作为候选目标
+        non_wolf_candidates = [p for p in room.get_alive_players() if p.role != Role.WEREWOLF]
+        if not non_wolf_candidates:
+            # 没有可选目标（不可能发生）
+            logger.error(f"[狼人杀] 群 {room.group_id} 狼人无可用击杀目标")
+            return
+
+        for wolf in alive_wolves:
             if not wolf.is_ai:
                 continue
 
@@ -237,17 +253,26 @@ class NightWolfPhase(BasePhase):
 
             # AI决策击杀目标
             target_number = await ai_service.decide_werewolf_kill(wolf, room)
+            target_player = None
+
             if target_number:
                 target_player = room.get_player_by_number(target_number)
-                if target_player and target_player.is_alive:
+                if target_player and target_player.is_alive and target_player.role != Role.WEREWOLF:
                     room.vote_state.night_votes[wolf.id] = target_player.id
                     room.log(f"🐺 {wolf.display_name}（狼人AI）选择刀 {target_player.display_name}")
                     logger.info(f"[狼人杀] AI狼人 {wolf.name} 选择击杀 {target_player.display_name}")
 
                     # 同步刀人选择到其他狼人AI上下文
-                    for teammate in room.get_alive_werewolves():
+                    for teammate in alive_wolves:
                         if teammate.id != wolf.id and teammate.is_ai and teammate.ai_context:
                             teammate.ai_context.add_event(f"狼队友 {wolf.display_name} 选择刀 {target_player.display_name}")
+                    continue
+
+            # 如果AI没有选择或选择无效，随机选择一个非狼人目标
+            target_player = random.choice(non_wolf_candidates)
+            room.vote_state.night_votes[wolf.id] = target_player.id
+            room.log(f"🐺 {wolf.display_name}（狼人AI）随机选择刀 {target_player.display_name}")
+            logger.info(f"[狼人杀] AI狼人 {wolf.name} 随机击杀 {target_player.display_name}")
 
     async def _check_all_voted(self, room: "GameRoom") -> bool:
         """检查是否所有狼人都已投票"""
@@ -255,7 +280,11 @@ class NightWolfPhase(BasePhase):
         voted_count = len(room.vote_state.night_votes)
 
         if voted_count >= len(alive_wolves):
-            room.cancel_timer()
+            # 只取消主定时器，不取消wolf_ai_process_task（可能是当前任务自己）
+            if room.timer_task and not room.timer_task.done():
+                room.timer_task.cancel()
+                room.timer_task = None
+            
             await self._finish_and_next(room)
             return True
         return False

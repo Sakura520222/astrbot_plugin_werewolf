@@ -1,6 +1,7 @@
 """白天命令处理"""
 from typing import TYPE_CHECKING, AsyncGenerator
 from astrbot.api.event import AstrMessageEvent
+from astrbot.api import logger
 
 from .base import BaseCommandHandler
 from ..models import GamePhase
@@ -34,6 +35,7 @@ class DayCommandHandler(BaseCommandHandler):
             yield event.plain_result("⚠️ 只有被杀的玩家才能使用此命令！")
             return
 
+        logger.info(f"[狼人杀] 群 {group_id} 玩家 {room.get_player(player_id).display_name} 遗言完毕")
         yield event.plain_result("✅ 遗言完毕！")
 
         from ..phases import LastWordsPhase
@@ -62,6 +64,7 @@ class DayCommandHandler(BaseCommandHandler):
             yield event.plain_result("⚠️ 现在不是你的发言时间！")
             return
 
+        logger.info(f"[狼人杀] 群 {group_id} 玩家 {room.get_player(player_id).display_name} 发言完毕")
         yield event.plain_result("✅ 发言完毕！")
 
         from ..phases import DaySpeakingPhase
@@ -88,6 +91,9 @@ class DayCommandHandler(BaseCommandHandler):
             yield event.plain_result("⚠️ 现在不是发言阶段！")
             return
 
+        creator = room.get_player(event.get_sender_id())
+        logger.info(f"[狼人杀] 群 {group_id} 房主 {creator.display_name} 跳过发言环节，直接进入投票")
+        
         # 取消定时器
         room.cancel_timer()
 

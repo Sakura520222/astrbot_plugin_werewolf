@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, Set, List, Optional, Any, TYPE_CHECKING
 import asyncio
+from threading import Lock
 from .enums import GamePhase, Role
 from .player import Player
 from .config import GameConfig
@@ -85,14 +86,6 @@ class GameRoom:
     vote_state: VoteState = field(default_factory=VoteState)
     speaking_state: SpeakingState = field(default_factory=SpeakingState)
 
-    def __post_init__(self):
-        """初始化角色状态（避免循环导入）"""
-        from ..roles import WitchState, HunterState
-        if self.witch_state is None:
-            self.witch_state = WitchState()
-        if self.hunter_state is None:
-            self.hunter_state = HunterState()
-
     # 管理状态
     banned_player_ids: Set[str] = field(default_factory=set)   # 被禁言的玩家
     temp_admin_ids: Set[str] = field(default_factory=set)      # 临时管理员
@@ -102,12 +95,24 @@ class GameRoom:
 
     # 游戏日志
     game_log: List[str] = field(default_factory=list)
+    
+    # 并发控制
+    _lock: Lock = field(default_factory=Lock, init=False)  # 用于保护共享状态的锁
+
+    def __post_init__(self):
+        """初始化角色状态（避免循环导入）"""
+        from ..roles import WitchState, HunterState
+        if self.witch_state is None:
+            self.witch_state = WitchState()
+        if self.hunter_state is None:
+            self.hunter_state = HunterState()
 
     # ========== 玩家管理方法 ==========
 
     def add_player(self, player: Player) -> None:
         """添加玩家"""
-        self.players[player.id] = player
+        with self._lock:
+            self.players[player.id] = player
 
     def get_player(self, player_id: str) -> Optional[Player]:
         """获取玩家"""
@@ -153,10 +158,11 @@ class GameRoom:
 
     def kill_player(self, player_id: str) -> Optional[Player]:
         """杀死玩家"""
-        player = self.get_player(player_id)
-        if player:
-            player.kill()
-        return player
+        with self._lock:
+            player = self.get_player(player_id)
+            if player:
+                player.kill()
+            return player
 
     @property
     def player_count(self) -> int:
@@ -209,7 +215,8 @@ class GameRoom:
 
     def set_phase(self, phase: GamePhase) -> None:
         """设置游戏阶段"""
-        self.phase = phase
+        with self._lock:
+            self.phase = phase
 
     def is_phase(self, phase: GamePhase) -> bool:
         """判断当前阶段"""
@@ -250,10 +257,21 @@ class GameRoom:
     # ========== 定时器管理方法 ==========
 
     def cancel_timer(self) -> None:
-        """取消当前定时器"""
+        """取消当前所有定时器和异步任务"""
+        # 取消主定时器任务
         if self.timer_task and not self.timer_task.done():
             self.timer_task.cancel()
             self.timer_task = None
+        
+        # 取消狼人AI投票任务
+        if hasattr(self, 'wolf_ai_vote_task') and self.wolf_ai_vote_task and not self.wolf_ai_vote_task.done():
+            self.wolf_ai_vote_task.cancel()
+            self.wolf_ai_vote_task = None
+        
+        # 取消全AI狼人处理任务
+        if hasattr(self, 'wolf_ai_process_task') and self.wolf_ai_process_task and not self.wolf_ai_process_task.done():
+            self.wolf_ai_process_task.cancel()
+            self.wolf_ai_process_task = None
 
     def set_timer(self, task: asyncio.Task) -> None:
         """设置定时器"""

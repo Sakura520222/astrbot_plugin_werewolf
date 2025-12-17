@@ -151,6 +151,10 @@ class LastWordsPhase(BasePhase):
 
     async def _finish_last_words(self, room: "GameRoom") -> None:
         """结束遗言阶段"""
+        # 检查游戏是否结束
+        if await self.game_manager.check_and_handle_victory(room):
+            return
+            
         from .phase_manager import PhaseManager
         phase_manager = PhaseManager(self.game_manager)
 
