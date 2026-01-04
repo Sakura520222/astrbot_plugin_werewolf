@@ -203,6 +203,12 @@ class WerewolfPlugin(Star):
         async for result in self.day_handler.day_vote(event):
             yield result
 
+    @filter.command("AI投票")
+    async def ai_vote(self, event: AstrMessageEvent):
+        """触发AI发言和投票"""
+        async for result in self.day_handler.ai_vote(event):
+            yield result
+
     # ==================== 查询命令 ====================
 
     @filter.command("查角色")

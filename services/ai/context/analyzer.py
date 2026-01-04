@@ -22,21 +22,68 @@ class SituationAnalyzer:
     def get_situation_awareness(room: "GameRoom") -> str:
         """获取局势感知"""
         alive_count = room.alive_count
-        if alive_count >= 7:
-            situation = "游戏初期，信息较少"
-            good_count, wolf_count = alive_count - 3, 3
-        elif alive_count >= 5:
-            situation = "游戏中期，局势逐渐明朗"
-            good_count, wolf_count = alive_count - 2, 2
+        
+        # 增强场上进度识别
+        total_players = len(room.players)
+        progress_ratio = alive_count / total_players
+        
+        # 游戏阶段判断
+        if progress_ratio >= 0.8:
+            game_stage = "初期"
+            situation = "游戏初期，信息较少，需要谨慎发言和观察"
+            tactical_focus = "收集信息，隐藏身份，初步判断"
+        elif progress_ratio >= 0.6:
+            game_stage = "中期"
+            situation = "游戏中期，局势逐渐明朗，需要开始布局"
+            tactical_focus = "分析投票模式，识别阵营，准备关键行动"
+        elif progress_ratio >= 0.4:
+            game_stage = "中后期"
+            situation = "游戏中后期，关键人物可能已暴露，需要谨慎行动"
+            tactical_focus = "保护关键队友，精准打击敌人，控制投票走向"
         else:
-            situation = "游戏后期，每一票都很关键！"
-            good_count, wolf_count = alive_count - 1, 1
+            game_stage = "后期"
+            situation = "游戏后期，每一票都很关键，可能进入决胜局！"
+            tactical_focus = "全力争取胜利，必要时暴露身份，最后一搏"
+        
+        # 精确计算阵营数量
+        alive_wolves = len(room.get_alive_werewolves())
+        alive_good = alive_count - alive_wolves
+        
+        # 胜利条件分析
+        if alive_wolves >= alive_good:
+            wolf_advantage = "狼人优势局，狼人即将胜利"
+            good_advantage = "好人危急，必须立即行动"
+        elif alive_wolves == 1 and alive_good >= 4:
+            wolf_advantage = "独狼局，狼人处于劣势"
+            good_advantage = "好人优势局，可以稳步推进"
+        elif alive_wolves == 2 and alive_good == 3:
+            wolf_advantage = "2狼3民局，局势微妙"
+            good_advantage = "关键局，投票决定胜负"
+        else:
+            wolf_advantage = "局势均衡"
+            good_advantage = "局势均衡"
+
+        # 根据角色提供不同视角
+        role_specific = ""
+        if hasattr(room, 'current_player') and room.current_player:
+            player = room.current_player
+            if player.role and player.role.value == "werewolf":
+                role_specific = f"\n🐺 狼人视角：{wolf_advantage}，{tactical_focus}"
+            elif player.role and player.role.value in ["seer", "witch", "hunter"]:
+                role_specific = f"\n👼 神职视角：{good_advantage}，{tactical_focus}"
+            else:
+                role_specific = f"\n👨‍🌾 村民视角：{good_advantage}，{tactical_focus}"
 
         return SITUATION_TEMPLATE.format(
             alive_count=alive_count,
-            good_count=good_count,
-            wolf_count=wolf_count,
-            situation=situation
+            good_count=alive_good,
+            wolf_count=alive_wolves,
+            situation=situation,
+            game_stage=game_stage,
+            tactical_focus=tactical_focus,
+            wolf_advantage=wolf_advantage,
+            good_advantage=good_advantage,
+            role_specific=role_specific
         )
 
     @staticmethod

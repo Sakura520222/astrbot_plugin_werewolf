@@ -194,6 +194,57 @@ class DayCommandHandler(BaseCommandHandler):
             vote_phase = DayVotePhase(self.game_manager)
             await vote_phase.on_all_voted(room)
 
+    async def ai_vote(self, event: AstrMessageEvent) -> AsyncGenerator:
+        """触发AI发言和投票"""
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("❌ 请在群聊中使用此命令！")
+            return
+
+        room = self.game_manager.get_room(group_id)
+        if not room:
+            yield event.plain_result("❌ 当前群没有进行中的游戏！")
+            return
+
+        if room.phase != GamePhase.DAY_VOTE:
+            yield event.plain_result("⚠️ 现在不是投票阶段！使用 /开始投票 进入投票")
+            return
+
+        # 只有房主或AI投票指令才能触发
+        player_id = event.get_sender_id()
+        if event.get_message_outline().strip() != "/AI投票":
+            if room.creator_id != player_id:
+                yield event.plain_result("⚠️ 只有房主才能使用此命令！")
+                return
+
+        # 检查是否有AI玩家
+        ai_players = [p for p in room.get_alive_players() if p.is_ai]
+        if not ai_players:
+            yield event.plain_result("❌ 当前游戏中没有AI玩家！")
+            return
+
+        # 触发AI发言和投票
+        room.day_ai_voted = True
+        logger.info(f"[狼人杀] 群 {group_id} 触发AI发言和投票")
+        
+        # 获取PK候选人
+        pk_candidates = None
+        if room.vote_state.is_pk_vote:
+            pk_candidates = [room.get_player(pid).number for pid in room.vote_state.pk_players if room.get_player(pid)]
+
+        # 处理AI发言和投票
+        from ..phases import DayVotePhase
+        vote_phase = DayVotePhase(self.game_manager)
+        await vote_phase._handle_ai_discussion_and_votes(room, room.vote_state.is_pk_vote, pk_candidates)
+        
+        # 检查是否所有人都投票了
+        if await vote_phase._check_all_voted(room):
+            yield event.plain_result("✅ AI发言和投票已完成，正在统计投票结果！")
+        else:
+            voted = len(room.vote_state.day_votes)
+            total = room.alive_count
+            yield event.plain_result(f"✅ AI发言和投票已完成！当前已投票 {voted}/{total} 人")
+
     async def capture_speech(self, event: AstrMessageEvent) -> None:
         """捕获发言内容（非命令消息）"""
         group_id = event.get_group_id()

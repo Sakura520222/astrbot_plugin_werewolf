@@ -1,10 +1,14 @@
 """战术分析提示词 - 局势感知、对跳辩论、抿狼技巧"""
 
 # 局势感知模板
-SITUATION_TEMPLATE = """【📊 当前局势】
-存活: {alive_count}人 (好人约{good_count}，狼人约{wolf_count})
-态势: {situation}
-"""
+SITUATION_TEMPLATE = """【📊 当前局势分析】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 游戏阶段: {game_stage}
+👥 存活人数: {alive_count}人 (好人约{good_count}，狼人约{wolf_count})
+📈 局势评估: {situation}
+💡 战术重点: {tactical_focus}
+{role_specific}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
 # 动态战术指令（根据局势生成）
 TACTICAL_DIRECTIVES = {

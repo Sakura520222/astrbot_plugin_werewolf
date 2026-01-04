@@ -58,6 +58,15 @@ class AIPlayerContext:
 
     # 投票期间讨论记录（所有人可见，投票前的重要参考）
     vote_discussions: List[dict] = field(default_factory=list)  # [{player, content, round}, ...]
+    
+    # 增强记忆系统
+    player_suspicions: dict = field(default_factory=dict)  # 玩家怀疑度记录 {player_name: suspicion_level}
+    player_alliances: dict = field(default_factory=dict)   # 玩家阵营推断 {player_name: alliance_type}
+    key_events_memory: List[dict] = field(default_factory=list)  # 关键事件记忆 [{event, importance, round}, ...]
+    speech_patterns: dict = field(default_factory=dict)   # 玩家发言模式分析 {player_name: pattern_analysis}
+    voting_patterns: dict = field(default_factory=dict)   # 玩家投票模式分析 {player_name: voting_analysis}
+    round_summaries: List[str] = field(default_factory=list)  # 每轮总结
+    personal_notes: List[str] = field(default_factory=list)  # 个人笔记和推理
 
     def add_wolf_chat(self, sender_name: str, content: str, round_num: int) -> None:
         """添加狼人密谋消息"""
@@ -109,6 +118,229 @@ class AIPlayerContext:
         """更新存活玩家列表"""
         self.alive_players = alive_list
         self.dead_players = dead_list
+
+    # ==================== 增强记忆系统方法 ====================
+    
+    def update_suspicion_level(self, player_name: str, level: int, reason: str = "") -> None:
+        """更新玩家怀疑度 (0-10, 0=绝对好人, 10=绝对狼人)"""
+        self.player_suspicions[player_name] = {
+            "level": level,
+            "reason": reason,
+            "round": self.current_round,
+            "history": self.player_suspicions.get(player_name, {}).get("history", [])
+        }
+        
+        # 保存历史记录
+        if "history" not in self.player_suspicions[player_name]:
+            self.player_suspicions[player_name]["history"] = []
+        self.player_suspicions[player_name]["history"].append({
+            "level": level,
+            "reason": reason,
+            "round": self.current_round
+        })
+        
+        # 限制历史记录长度
+        if len(self.player_suspicions[player_name]["history"]) > 5:
+            self.player_suspicions[player_name]["history"] = self.player_suspicions[player_name]["history"][-5:]
+
+    def update_alliance_inference(self, player_name: str, alliance_type: str, confidence: float, reason: str = "") -> None:
+        """更新玩家阵营推断 (werewolf/good/unknown, 置信度0-1)"""
+        self.player_alliances[player_name] = {
+            "type": alliance_type,
+            "confidence": confidence,
+            "reason": reason,
+            "round": self.current_round,
+            "history": self.player_alliances.get(player_name, {}).get("history", [])
+        }
+        
+        # 保存历史记录
+        if "history" not in self.player_alliances[player_name]:
+            self.player_alliances[player_name]["history"] = []
+        self.player_alliances[player_name]["history"].append({
+            "type": alliance_type,
+            "confidence": confidence,
+            "reason": reason,
+            "round": self.current_round
+        })
+        
+        # 限制历史记录长度
+        if len(self.player_alliances[player_name]["history"]) > 5:
+            self.player_alliances[player_name]["history"] = self.player_alliances[player_name]["history"][-5:]
+
+    def add_key_event_memory(self, event: str, importance: int, details: dict = None) -> None:
+        """添加关键事件记忆 (重要性1-10)"""
+        memory_entry = {
+            "event": event,
+            "importance": importance,
+            "round": self.current_round,
+            "details": details or {},
+            "timestamp": self.current_phase
+        }
+        
+        # 检查是否已存在类似事件
+        for existing in self.key_events_memory:
+            if existing["event"] == event and existing["round"] == self.current_round:
+                # 更新重要性
+                existing["importance"] = max(existing["importance"], importance)
+                if details:
+                    existing["details"].update(details)
+                return
+        
+        self.key_events_memory.append(memory_entry)
+        
+        # 按重要性排序并限制数量
+        self.key_events_memory.sort(key=lambda x: x["importance"], reverse=True)
+        if len(self.key_events_memory) > 20:
+            self.key_events_memory = self.key_events_memory[:20]
+
+    def analyze_speech_pattern(self, player_name: str, speech_content: str) -> None:
+        """分析玩家发言模式"""
+        if player_name not in self.speech_patterns:
+            self.speech_patterns[player_name] = {
+                "speech_count": 0,
+                "avg_length": 0,
+                "keywords": {},
+                "emotional_state": "neutral",
+                "consistency_score": 0.5,
+                "recent_speeches": []
+            }
+        
+        pattern = self.speech_patterns[player_name]
+        pattern["speech_count"] += 1
+        pattern["recent_speeches"].append({
+            "content": speech_content,
+            "round": self.current_round,
+            "length": len(speech_content)
+        })
+        
+        # 限制最近发言记录数量
+        if len(pattern["recent_speeches"]) > 10:
+            pattern["recent_speeches"] = pattern["recent_speeches"][-10:]
+        
+        # 更新平均长度
+        total_length = sum(s["length"] for s in pattern["recent_speeches"])
+        pattern["avg_length"] = total_length / len(pattern["recent_speeches"])
+        
+        # 简单关键词分析
+        keywords = ["狼", "杀", "投票", "预言家", "女巫", "猎人", "好人", "坏人", "怀疑", "相信"]
+        for keyword in keywords:
+            if keyword in speech_content:
+                pattern["keywords"][keyword] = pattern["keywords"].get(keyword, 0) + 1
+        
+        # 简单情绪分析
+        emotional_words = {
+            "激动": ["！", "？？", "什么鬼", "搞笑"],
+            "冷静": ["分析", "逻辑", "因为", "所以"],
+            "困惑": ["？", "不懂", "为什么", "奇怪"],
+            "攻击": ["假", "骗子", "悍跳", "装"]
+        }
+        
+        for emotion, words in emotional_words.items():
+            if any(word in speech_content for word in words):
+                pattern["emotional_state"] = emotion
+                break
+
+    def analyze_voting_pattern(self, player_name: str, vote_target: str, is_pk: bool = False) -> None:
+        """分析玩家投票模式"""
+        if player_name not in self.voting_patterns:
+            self.voting_patterns[player_name] = {
+                "vote_count": 0,
+                "targets": {},
+                "pk_behavior": "avoid",
+                "consistency": 0.5,
+                "recent_votes": []
+            }
+        
+        pattern = self.voting_patterns[player_name]
+        pattern["vote_count"] += 1
+        pattern["targets"][vote_target] = pattern["targets"].get(vote_target, 0) + 1
+        pattern["recent_votes"].append({
+            "target": vote_target,
+            "round": self.current_round,
+            "is_pk": is_pk
+        })
+        
+        # 限制最近投票记录数量
+        if len(pattern["recent_votes"]) > 10:
+            pattern["recent_votes"] = pattern["recent_votes"][-10:]
+        
+        # 分析PK行为
+        if is_pk:
+            pattern["pk_behavior"] = "participate"
+        
+        # 计算一致性（基于投票目标的多样性）
+        unique_targets = len(set(v["target"] for v in pattern["recent_votes"]))
+        pattern["consistency"] = 1.0 - (unique_targets - 1) / max(len(pattern["recent_votes"]) - 1, 1)
+
+    def add_round_summary(self, summary: str) -> None:
+        """添加轮次总结"""
+        self.round_summaries.append(f"第{self.current_round}轮: {summary}")
+        # 限制总结数量
+        if len(self.round_summaries) > 10:
+            self.round_summaries = self.round_summaries[-10:]
+
+    def add_personal_note(self, note: str) -> None:
+        """添加个人笔记和推理"""
+        self.personal_notes.append(f"[第{self.current_round}轮] {note}")
+        # 限制笔记数量
+        if len(self.personal_notes) > 30:
+            self.personal_notes = self.personal_notes[-30:]
+
+    def get_memory_summary(self) -> str:
+        """获取记忆摘要"""
+        lines = []
+        
+        # 怀疑度摘要
+        if self.player_suspicions:
+            lines.append("【🧠 玩家怀疑度分析】")
+            sorted_suspicions = sorted(
+                self.player_suspicions.items(), 
+                key=lambda x: x[1].get("level", 0), 
+                reverse=True
+            )
+            for player, suspicion in sorted_suspicions[:5]:  # 只显示前5个
+                level = suspicion.get("level", 0)
+                reason = suspicion.get("reason", "")
+                lines.append(f"- {player}: {level}/10 ({reason})")
+            lines.append("")
+        
+        # 阵营推断摘要
+        if self.player_alliances:
+            lines.append("【👥 阵营推断】")
+            for player, alliance in self.player_alliances.items():
+                alliance_type = alliance.get("type", "unknown")
+                confidence = alliance.get("confidence", 0)
+                lines.append(f"- {player}: {alliance_type} (置信度: {confidence:.1f})")
+            lines.append("")
+        
+        # 关键事件摘要
+        if self.key_events_memory:
+            lines.append("【⭐ 关键事件记忆】")
+            for event in self.key_events_memory[:5]:  # 只显示前5个
+                importance = event.get("importance", 0)
+                event_desc = event.get("event", "")
+                lines.append(f"- [{importance}/10] {event_desc}")
+            lines.append("")
+        
+        # 发言模式摘要
+        if self.speech_patterns:
+            lines.append("【🗣️ 发言模式分析】")
+            for player, pattern in list(self.speech_patterns.items())[:3]:  # 只显示前3个
+                avg_length = pattern.get("avg_length", 0)
+                emotion = pattern.get("emotional_state", "neutral")
+                lines.append(f"- {player}: 平均长度{avg_length:.0f}字, 情绪{emotion}")
+            lines.append("")
+        
+        # 投票模式摘要
+        if self.voting_patterns:
+            lines.append("【🗳️ 投票模式分析】")
+            for player, pattern in list(self.voting_patterns.items())[:3]:  # 只显示前3个
+                consistency = pattern.get("consistency", 0)
+                pk_behavior = pattern.get("pk_behavior", "avoid")
+                lines.append(f"- {player}: 一致性{consistency:.1f}, PK行为{pk_behavior}")
+            lines.append("")
+        
+        return "\n".join(lines)
 
     def to_prompt_context(self) -> str:
         """将上下文转换为提示词格式"""
@@ -243,5 +475,23 @@ class AIPlayerContext:
                 for disc in current_round_discussions:  # 显示全部
                     lines.append(f"  💭 {disc['player']}：{disc['content'][:120]}")
                 lines.append("💡 分析：谁在带节奏？谁在保谁？谁在攻击谁？这些讨论会影响投票结果！")
+
+        # 🧠 增强记忆系统 - 记忆摘要
+        memory_summary = self.get_memory_summary()
+        if memory_summary:
+            lines.append(f"\n🧠【你的记忆分析 - AI增强记忆系统】")
+            lines.append(memory_summary)
+
+        # 轮次总结
+        if self.round_summaries:
+            lines.append(f"\n【📝 游戏轮次总结】")
+            for summary in self.round_summaries[-3:]:  # 只显示最近3轮
+                lines.append(f"- {summary}")
+
+        # 个人笔记
+        if self.personal_notes:
+            lines.append(f"\n【📔 你的个人笔记和推理】")
+            for note in self.personal_notes[-5:]:  # 只显示最近5条
+                lines.append(f"- {note}")
 
         return "\n".join(lines)
