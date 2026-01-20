@@ -373,7 +373,7 @@ class DayVotePhase(BasePhase):
             exiled_player.is_alive = False
 
             # 检查游戏是否结束
-            if await self.game_manager.check_game_over(room):
+            if await self.game_manager.check_and_handle_victory(room):
                 return
 
             # 检查角色特殊能力
@@ -424,7 +424,7 @@ class DayVotePhase(BasePhase):
             await self._process_vote_result(room)
         else:
             # 无人投票，进入下一夜晚前先检查游戏是否结束
-            if await self.game_manager.check_game_over(room):
+            if await self.game_manager.check_and_handle_victory(room):
                 return
             await self._enter_night(room)
 
