@@ -9,10 +9,18 @@ if TYPE_CHECKING:
 def format_player_list(
     players: list["Player"], exclude_ids: list[str] | None = None
 ) -> str:
-    """格式化玩家列表"""
+    """Format players in ascending seat-number order.
+
+    Args:
+        players: Players to include in the list.
+        exclude_ids: Player IDs to omit from the list.
+
+    Returns:
+        Formatted player names, one per line.
+    """
     exclude_ids = exclude_ids or []
     lines = []
-    for p in players:
+    for p in sorted(players, key=lambda player: player.number):
         if p.id not in exclude_ids:
             lines.append(f"  • {p.display_name}")
     return "\n".join(lines)

@@ -19,6 +19,11 @@ class MessageService:
 
     async def send_group_message(self, room: "GameRoom", text: str) -> bool:
         """发送群消息"""
+        if not isinstance(text, str):
+            raise TypeError("Public messages must contain text, not model objects")
+        if any(marker in text for marker in ("Player(", "ai_context=", "ai_config=")):
+            logger.error("[Werewolf] Blocked internal player data in public message")
+            return False
         if not room.msg_origin:
             return False
 
@@ -135,29 +140,33 @@ class MessageService:
         saved: bool = False,
         poisoned_name: str | None = None,
     ) -> bool:
-        """公告天亮"""
-        if saved:
-            text = (
-                f"☀️ 天亮了！\n\n"
-                f"昨晚是平安夜，没有人死亡！\n\n"
-                f"存活玩家：{room.alive_count}/{room.player_count}\n"
-            )
-        elif killed_name:
-            text = (
-                f"☀️ 天亮了！\n\n"
-                f"昨晚，玩家 {killed_name} 死了！\n\n"
-                f"存活玩家：{room.alive_count}/{room.player_count}\n"
-            )
-        else:
-            text = (
-                f"☀️ 天亮了！\n\n"
-                f"昨晚是平安夜，没有人死亡！\n\n"
-                f"存活玩家：{room.alive_count}/{room.player_count}\n"
-            )
+        """Announce unique public deaths without revealing their causes.
 
-        if poisoned_name:
-            text += f"\n同时，玩家 {poisoned_name} 死了！\n"
+        Args:
+            room: Room whose night just ended.
+            killed_name: Unsaved wolf victim's public name, if any.
+            saved: Whether the wolf victim was saved.
+            poisoned_name: Poison victim's public name, if any.
 
+        Returns:
+            Whether the dawn announcement was sent.
+        """
+        deaths = list(
+            dict.fromkeys(
+                name
+                for name in (killed_name if not saved else None, poisoned_name)
+                if name
+            )
+        )
+        outcome = (
+            f"昨晚，玩家 {'、'.join(deaths)} 死了！"
+            if deaths
+            else "昨晚是平安夜，没有人死亡！"
+        )
+        text = (
+            f"☀️ 天亮了！\n\n{outcome}\n\n"
+            f"存活玩家：{room.alive_count}/{room.player_count}\n"
+        )
         return await self.send_group_message(room, text)
 
     async def announce_vote_start(self, room: "GameRoom") -> bool:
@@ -211,7 +220,23 @@ class MessageService:
         exiled_name: str | None = None,
         is_pk: bool = False,
     ) -> bool:
-        """公告投票结果（纯文本）"""
+        """Announce votes using only public fields from known players.
+
+        Args:
+            room: Room supplying the public player names.
+            vote_counts: Counts keyed by target player ID.
+            voters_map: Voter IDs grouped by target player ID.
+            exiled_name: Display name of the exiled player, never a model object.
+            is_pk: Whether this result belongs to a PK vote.
+
+        Returns:
+            Whether the public message was sent.
+
+        Raises:
+            TypeError: If the exile argument is not a display-name string.
+        """
+        if exiled_name is not None and not isinstance(exiled_name, str):
+            raise TypeError("Exile announcements require a public display name")
         prefix = "📊 PK投票结果公布！\n\n" if is_pk else "📊 投票结果公布！\n\n"
         text = prefix
 
@@ -221,7 +246,12 @@ class MessageService:
         for target_id, vote_count in sorted_votes:
             target = room.get_player(target_id)
             if target:
-                voter_names = voters_map.get(target_id, [])
+                voter_ids = set(voters_map.get(target_id, []))
+                voter_names = [
+                    voter.display_name
+                    for voter in sorted(room.players.values(), key=lambda p: p.number)
+                    if voter.id in voter_ids
+                ]
                 voters_str = "、".join(voter_names) if voter_names else "无"
                 text += (
                     f"• {target.display_name}: {vote_count}票 (投票者: {voters_str})\n"

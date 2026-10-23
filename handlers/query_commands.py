@@ -63,12 +63,13 @@ class QueryCommandHandler(BaseCommandHandler):
         status_text = (
             f"📊 游戏状态\n\n"
             f"阶段：{room.phase.value}\n"
-            f"天数：第 {room.day_count} 天\n"
+            f"天数：第 {room.current_round} 天\n"
             f"存活人数：{room.alive_count}/{room.player_count}\n\n"
             f"玩家列表：\n"
         )
 
-        for p in room.players.values():
+        # Show players in ascending seat-number order.
+        for p in sorted(room.players.values(), key=lambda p: p.number):
             status_icon = "✅" if p.is_alive else "💀"
             status_text += (
                 f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
@@ -88,10 +89,10 @@ class QueryCommandHandler(BaseCommandHandler):
             yield event.plain_result("❌ 当前群没有进行中的游戏！")
             return
 
-        # 构建玩家编号列表
+        # Build the player list in ascending seat-number order.
         numbers_text = "🔢 玩家编号列表\n\n"
 
-        for p in room.players.values():
+        for p in sorted(room.players.values(), key=lambda p: p.number):
             status_icon = "✅" if p.is_alive else "💀"
             numbers_text += (
                 f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"

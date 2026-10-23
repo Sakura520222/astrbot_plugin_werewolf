@@ -28,7 +28,7 @@ class VoteAction(BaseAction):
         player: "Player",
         room: "GameRoom",
         is_pk: bool = False,
-        pk_candidates: list[str] = None,
+        pk_candidates: list[int] | None = None,
     ) -> tuple[str, int | None]:
         """AI生成投票决策"""
         context = ContextBuilder.build_context(player, room)
@@ -59,13 +59,25 @@ class VoteAction(BaseAction):
             context += "\n" + memory_guidance
 
         # 添加自我认知提醒
-        context += f"\n【🆔 自我认知提醒】\n你是{player.number}号玩家{player.display_name}，投票时不能投给自己！"
+        context += f"\n【自我认知提醒】\n你是{player.number}号玩家{player.display_name}，投票时不能投给自己！"
+
+        # PK mode without candidates permits abstention only.
+        allowed_numbers = (pk_candidates or []) if is_pk else None
+        extra_rule = ""
+        if is_pk:
+            candidate_desc = "、".join(str(n) for n in allowed_numbers)
+            extra_rule = (
+                f"\n【PK投票限制】只能投给以下存活候选编号：{candidate_desc}；也可以弃票。"
+                if allowed_numbers
+                else "\n【PK投票限制】当前没有合法候选人，只能弃票。"
+            )
 
         prompt = ROLE_PROMPTS["day_vote"].format(
             anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
             soul_setting=soul_setting,
+            personality=self._get_player_personality(player),
             context=context,
-            vote_tips=vote_tips,
+            vote_tips=vote_tips + extra_rule,
             human_style=HUMAN_STYLE_TIPS,
         )
 
@@ -75,77 +87,35 @@ class VoteAction(BaseAction):
         vote_target = None
 
         if response:
-            # 解析发言
             speech_match = re.search(
-                r"\[发言\]\s*(.+?)(?=\[投票\]|$)", response, re.DOTALL
+                r"\[发言\]\s*(.*?)(?=\[投票\]|$)", response, re.DOTALL
             )
             if speech_match:
-                speech = speech_match.group(1).strip()[:100]  # 允许更长的发言
+                speech = speech_match.group(1).strip()
+            elif "[投票]" not in response:
+                speech = response
 
-            # 解析投票
-            vote_match = re.search(r"\[投票\]\s*(\d+|弃票)", response)
-            if vote_match:
-                vote_str = vote_match.group(1)
-                if vote_str != "弃票":
-                    try:
-                        raw_target = int(vote_str)
-                        # 使用验证器确保目标有效
-                        vote_target = TargetValidator.validate_vote_target(
-                            room, raw_target, player
+            # Never infer a ballot from numbers mentioned in discussion prose.
+            ballots = re.findall(r"\[投票\]([^\r\n]*)", response)
+            ballot = ballots[0].strip() if len(ballots) == 1 else ""
+            if not ballots:
+                ballot = response.strip()
+            if re.fullmatch(r"[0-9]+|弃票", ballot) and ballot != "弃票":
+                try:
+                    raw_target = int(ballot)
+                except ValueError:
+                    raw_target = None
+                if raw_target is not None:
+                    vote_target = TargetValidator.validate_vote_target(
+                        room, raw_target, player, allowed_numbers
+                    )
+                    if vote_target is None:
+                        logger.warning(
+                            f"[Werewolf AI] {player.name} supplied an invalid vote "
+                            f"target {raw_target}; abstaining"
                         )
-                        if vote_target is None:
-                            logger.warning(
-                                f"[狼人杀AI] {player.name} 投票目标 {raw_target} 无效（死亡或不存在）"
-                            )
-                    except ValueError:
-                        pass
 
-            # 如果没有找到格式化内容，尝试直接提取
-            if not speech and vote_target is None:
-                numbers = re.findall(r"\d+", response)
-                if numbers:
-                    raw_target = int(numbers[0])
-                    # 确保不投自己
-                    if raw_target != player.number:
-                        vote_target = TargetValidator.validate_vote_target(
-                            room, raw_target, player
-                        )
-                        if vote_target is None:
-                            logger.warning(
-                                f"[狼人杀AI] {player.name} 投票目标 {raw_target} 无效（死亡或不存在）"
-                            )
-                    else:
-                        logger.warning(f"[狼人杀AI] {player.name} 尝试投自己，自动拒绝")
-                speech = response[:100] if len(response) <= 100 else ""
-
-        # 如果投票目标仍然无效，提供默认行为
-        if vote_target is None:
-            # 获取所有有效的投票目标（排除自己和死亡玩家）
-            valid_targets = TargetValidator.get_valid_targets(
-                room, exclude_player=player, include_dead=False
-            )
-            if valid_targets:
-                # 选择第一个有效目标作为默认投票
-                vote_target = valid_targets[0]
-                logger.info(
-                    f"[狼人杀AI] {player.name} 投票目标无效，使用默认目标 {vote_target}号"
-                )
-                if not speech:
-                    speech = f"投票目标无效，我选择投{vote_target}号。"
-            else:
-                # 如果没有有效目标，选择弃票
-                logger.info(f"[狼人杀AI] {player.name} 没有有效投票目标，选择弃票")
-                if not speech:
-                    speech = "没有有效的投票目标，我选择弃票。"
-
-        # 记录投票模式
-        if vote_target is not None and player.ai_context:
-            target_player = room.get_player(vote_target)
-            if target_player:
-                player.ai_context.analyze_voting_pattern(
-                    player.display_name, target_player.display_name, is_pk
-                )
-
+        # Tentative discussions must not update committed voting patterns.
         return (speech, vote_target)
 
     def _get_vote_memory_guidance(self, player: "Player", room: "GameRoom") -> str:
@@ -154,7 +124,7 @@ class VoteAction(BaseAction):
             return ""
 
         ctx = player.ai_context
-        lines = ["【🧠 记忆系统投票指导】"]
+        lines = ["【记忆系统投票指导】"]
 
         # 基于怀疑度分析 - 投票高怀疑度目标
         if ctx.player_suspicions:
@@ -164,8 +134,8 @@ class VoteAction(BaseAction):
                 if info.get("level", 0) >= 7
             ]
             if high_suspicion:
-                lines.append("🎯 建议投票目标（高怀疑度）：")
-                for player_name, suspicion in high_suspicion[:3]:
+                lines.append(" 建议投票目标（高怀疑度）：")
+                for player_name, suspicion in high_suspicion:
                     reason = suspicion.get("reason", "")
                     level = suspicion.get("level", 0)
                     lines.append(f"- {player_name} ({level}/10): {reason}")
@@ -178,7 +148,7 @@ class VoteAction(BaseAction):
                 if info.get("type") == "werewolf" and info.get("confidence", 0) >= 0.8
             ]
             if confirmed_wolves:
-                lines.append("🐺 确认的狼人（优先投票）：")
+                lines.append(" 确认的狼人（优先投票）：")
                 for player_name, alliance in confirmed_wolves:
                     confidence = alliance.get("confidence", 0)
                     lines.append(f"- {player_name} (置信度: {confidence:.1f})")
@@ -222,29 +192,29 @@ class VoteAction(BaseAction):
                     )
 
             if suspicious_speakers:
-                lines.append("🗣️ 可疑发言模式分析：")
+                lines.append(" 可疑发言模式分析：")
                 suspicious_speakers.sort(key=lambda x: x[1], reverse=True)
-                for name, score, reasons in suspicious_speakers[:3]:
+                for name, score, reasons in suspicious_speakers:
                     lines.append(f"- {name} (可疑度{score}): {reasons}")
 
         # 角色特定投票指导
         role_key = ContextBuilder.get_role_key(player)
         if role_key == "werewolf":
-            lines.append("🐺 狼人投票策略：")
+            lines.append(" 狼人投票策略：")
             lines.append("- 避免投队友，分散投票看起来更自然")
             lines.append("- 可以跟票，但不要总是跟同一群人")
             if ctx.werewolf_teammates:
                 teammates_str = ", ".join(ctx.werewolf_teammates)
                 lines.append(f"- 绝对不能投的队友：{teammates_str}")
         elif role_key == "seer" and ctx.seer_results:
-            lines.append("🔮 预言家投票策略：")
+            lines.append(" 预言家投票策略：")
             for result in ctx.seer_results:
                 target = result.get("target", "")
                 is_wolf = result.get("is_werewolf", False)
                 if is_wolf:
                     lines.append(f"- 优先投票：{target} (已验出是狼人)")
         elif role_key == "witch":
-            lines.append("🧪 女巫投票策略：")
+            lines.append(" 女巫投票策略：")
             lines.append("- 结合昨晚信息判断")
             if ctx.last_killed_player and not ctx.witch_antidote_used:
                 lines.append(
@@ -278,8 +248,8 @@ class VoteAction(BaseAction):
                     consistent_voters.append((voter, targets, max_votes))
 
         if consistent_voters:
-            lines.append("🗳️ 投票模式分析：")
-            for voter, targets, max_votes in consistent_voters[:3]:
+            lines.append(" 投票模式分析：")
+            for voter, targets, max_votes in consistent_voters:
                 primary_target = max(targets.items(), key=lambda x: x[1])[0]
                 lines.append(f"- {voter}: 经常投{primary_target} ({max_votes}次)")
 

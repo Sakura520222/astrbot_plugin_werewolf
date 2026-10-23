@@ -27,6 +27,7 @@ class AIPlayerContext:
     player_number: int = 0  # 玩家编号
     role_name: str = ""  # 角色名称
     is_werewolf: bool = False  # 是否是狼人
+    personality: str = ""  # 性格提示词模板（游戏开始时固定，保证风格稳定）
 
     # 狼人队友（仅狼人可见）
     werewolf_teammates: list[str] = field(default_factory=list)
@@ -157,12 +158,6 @@ class AIPlayerContext:
             {"level": level, "reason": reason, "round": self.current_round}
         )
 
-        # 限制历史记录长度
-        if len(self.player_suspicions[player_name]["history"]) > 5:
-            self.player_suspicions[player_name]["history"] = self.player_suspicions[
-                player_name
-            ]["history"][-5:]
-
     def update_alliance_inference(
         self, player_name: str, alliance_type: str, confidence: float, reason: str = ""
     ) -> None:
@@ -187,12 +182,6 @@ class AIPlayerContext:
             }
         )
 
-        # 限制历史记录长度
-        if len(self.player_alliances[player_name]["history"]) > 5:
-            self.player_alliances[player_name]["history"] = self.player_alliances[
-                player_name
-            ]["history"][-5:]
-
     def add_key_event_memory(
         self, event: str, importance: int, details: dict = None
     ) -> None:
@@ -216,10 +205,7 @@ class AIPlayerContext:
 
         self.key_events_memory.append(memory_entry)
 
-        # 按重要性排序并限制数量
         self.key_events_memory.sort(key=lambda x: x["importance"], reverse=True)
-        if len(self.key_events_memory) > 20:
-            self.key_events_memory = self.key_events_memory[:20]
 
     def analyze_speech_pattern(self, player_name: str, speech_content: str) -> None:
         """分析玩家发言模式"""
@@ -242,10 +228,6 @@ class AIPlayerContext:
                 "length": len(speech_content),
             }
         )
-
-        # 限制最近发言记录数量
-        if len(pattern["recent_speeches"]) > 10:
-            pattern["recent_speeches"] = pattern["recent_speeches"][-10:]
 
         # 更新平均长度
         total_length = sum(s["length"] for s in pattern["recent_speeches"])
@@ -301,10 +283,6 @@ class AIPlayerContext:
             {"target": vote_target, "round": self.current_round, "is_pk": is_pk}
         )
 
-        # 限制最近投票记录数量
-        if len(pattern["recent_votes"]) > 10:
-            pattern["recent_votes"] = pattern["recent_votes"][-10:]
-
         # 分析PK行为
         if is_pk:
             pattern["pk_behavior"] = "participate"
@@ -318,16 +296,10 @@ class AIPlayerContext:
     def add_round_summary(self, summary: str) -> None:
         """添加轮次总结"""
         self.round_summaries.append(f"第{self.current_round}轮: {summary}")
-        # 限制总结数量
-        if len(self.round_summaries) > 10:
-            self.round_summaries = self.round_summaries[-10:]
 
     def add_personal_note(self, note: str) -> None:
         """添加个人笔记和推理"""
         self.personal_notes.append(f"[第{self.current_round}轮] {note}")
-        # 限制笔记数量
-        if len(self.personal_notes) > 30:
-            self.personal_notes = self.personal_notes[-30:]
 
     def get_memory_summary(self) -> str:
         """获取记忆摘要"""
@@ -335,13 +307,13 @@ class AIPlayerContext:
 
         # 怀疑度摘要
         if self.player_suspicions:
-            lines.append("【🧠 玩家怀疑度分析】")
+            lines.append("【玩家怀疑度分析】")
             sorted_suspicions = sorted(
                 self.player_suspicions.items(),
                 key=lambda x: x[1].get("level", 0),
                 reverse=True,
             )
-            for player, suspicion in sorted_suspicions[:5]:  # 只显示前5个
+            for player, suspicion in sorted_suspicions:
                 level = suspicion.get("level", 0)
                 reason = suspicion.get("reason", "")
                 lines.append(f"- {player}: {level}/10 ({reason})")
@@ -349,7 +321,7 @@ class AIPlayerContext:
 
         # 阵营推断摘要
         if self.player_alliances:
-            lines.append("【👥 阵营推断】")
+            lines.append("【阵营推断 - 主观判断，不是已确认身份】")
             for player, alliance in self.player_alliances.items():
                 alliance_type = alliance.get("type", "unknown")
                 confidence = alliance.get("confidence", 0)
@@ -358,8 +330,8 @@ class AIPlayerContext:
 
         # 关键事件摘要
         if self.key_events_memory:
-            lines.append("【⭐ 关键事件记忆】")
-            for event in self.key_events_memory[:5]:  # 只显示前5个
+            lines.append("【关键事件记忆】")
+            for event in self.key_events_memory:
                 importance = event.get("importance", 0)
                 event_desc = event.get("event", "")
                 lines.append(f"- [{importance}/10] {event_desc}")
@@ -367,10 +339,8 @@ class AIPlayerContext:
 
         # 发言模式摘要
         if self.speech_patterns:
-            lines.append("【🗣️ 发言模式分析】")
-            for player, pattern in list(self.speech_patterns.items())[
-                :3
-            ]:  # 只显示前3个
+            lines.append("【发言模式分析】")
+            for player, pattern in self.speech_patterns.items():
                 avg_length = pattern.get("avg_length", 0)
                 emotion = pattern.get("emotional_state", "neutral")
                 lines.append(f"- {player}: 平均长度{avg_length:.0f}字, 情绪{emotion}")
@@ -378,10 +348,8 @@ class AIPlayerContext:
 
         # 投票模式摘要
         if self.voting_patterns:
-            lines.append("【🗳️ 投票模式分析】")
-            for player, pattern in list(self.voting_patterns.items())[
-                :3
-            ]:  # 只显示前3个
+            lines.append("【投票模式分析】")
+            for player, pattern in self.voting_patterns.items():
                 consistency = pattern.get("consistency", 0)
                 pk_behavior = pattern.get("pk_behavior", "avoid")
                 lines.append(
@@ -398,18 +366,25 @@ class AIPlayerContext:
 
         lines = []
 
-        # 📜 游戏规则说明（让所有AI了解基本规则，避免质疑女巫等角色的能力）
+        #  游戏规则说明（让所有AI了解基本规则，避免质疑女巫等角色的能力）
         lines.append(GAME_RULES)
         lines.append("")
 
-        # 🌅 首日特殊声明（防止AI产生虚假记忆）
+        #  首日特殊声明（防止AI产生虚假记忆）
+        # 注意：首夜各角色已有各自的夜间行动（狼人刀人、预言家验人、女巫用药），
+        # 只是场上还没有任何"公开的发言信息"，描述必须区分公共事实与角色私密信息
         if self.current_round == 1 and len(self.speeches) == 0:
-            lines.append("🌅 【重要】这是游戏的第一天！")
-            lines.append("⚠️ 昨晚只分配了身份，没有任何玩家发言，没有任何公开信息。")
-            lines.append('⚠️ 严禁编造"昨天XXX说了"之类的虚假信息！')
+            lines.append(" 【重要】这是游戏的第1天白天！")
+            lines.append(
+                " 场上目前没有任何公开的发言和投票记录，今天是第一次公开发言。"
+            )
+            lines.append(
+                " 除了你的身份和上方事件记录允许你知道的信息外，你对其他人的身份一无所知。"
+            )
+            lines.append(' 严禁编造"之前有人说""昨天XXX说了"之类的虚假信息！')
             lines.append("")
 
-        # 🚨 昨晚死亡情况（最重要！放在最前面强调）
+        #  昨晚死亡情况（最重要！放在最前面强调）
         last_night_deaths = [
             e for e in self.game_events if f"第{self.current_round}夜死亡" in e
         ]
@@ -418,31 +393,31 @@ class AIPlayerContext:
         ]
 
         if last_night_deaths:
-            lines.append("🚨🚨🚨【昨晚死亡公告 - 必须认真阅读！】🚨🚨🚨")
+            lines.append("【昨晚死亡公告 - 必须认真阅读！】")
             for death_event in last_night_deaths:
-                lines.append(f"☠️ {death_event}")
-            lines.append("⚠️ 昨晚有人死了！这不是平安夜！严禁说平安夜！")
+                lines.append(f" {death_event}")
+            lines.append(" 昨晚有人死了！这不是平安夜！严禁说平安夜！")
             lines.append("")
         elif last_night_peaceful:
-            lines.append("🌙【昨晚是平安夜】")
+            lines.append("【昨晚是平安夜】")
             lines.append("昨晚没有人死亡，女巫可能救了人。")
             lines.append("")
 
-        # 🗳️ 投票放逐结果（重要！突出显示）
+        #  投票放逐结果（重要！突出显示）
         exile_events = [
             e for e in self.game_events if "投票放逐" in e and "被放逐出局" in e
         ]
         if exile_events:
-            lines.append("🗳️🗳️🗳️【投票放逐记录 - 关键信息！】🗳️🗳️🗳️")
+            lines.append("【投票放逐记录 - 关键信息！】")
             for exile_event in exile_events:
-                lines.append(f"⚖️ {exile_event}")
-            lines.append("💡 分析：谁投了被放逐者？谁保了他？这能暴露阵营！")
+                lines.append(f" {exile_event}")
+            lines.append(" 分析：谁投了被放逐者？谁保了他？这能暴露阵营！")
             lines.append("")
 
         # 当前阶段
         if self.current_phase:
             lines.append("【当前阶段】")
-            lines.append(f"⏰ {self.current_phase}")
+            lines.append(f" {self.current_phase}")
             lines.append("")
 
         # 基本信息
@@ -456,15 +431,15 @@ class AIPlayerContext:
         if self.is_werewolf and self.wolf_chat_messages:
             lines.append("\n【狼人密谋记录 - 绝密！严禁在白天提及！】")
             lines.append(
-                "⚠️ 以下是你们狼人队友在夜晚的私密交流，只有狼人能看到，白天绝对不能透露！"
+                " 以下是你们狼人队友在夜晚的私密交流，只有狼人能看到，白天绝对不能透露！"
             )
-            for msg in self.wolf_chat_messages[-10:]:  # 只显示最近10条
+            for msg in self.wolf_chat_messages:
                 lines.append(
                     f"[第{msg['round']}晚夜间密谋] {msg['sender']}: {msg['content']}"
                 )
 
         # 验人结果
-        if self.seer_results:
+        if self.role_name == "预言家" and self.seer_results:
             lines.append("\n【验人结果】")
             for result in self.seer_results:
                 status = "狼人" if result["is_werewolf"] else "好人"
@@ -486,9 +461,9 @@ class AIPlayerContext:
             if self.last_killed_player:
                 lines.append(f"今晚被狼人杀死的是：{self.last_killed_player}")
             if self.witch_saved_player:
-                lines.append(f"🩹 你救过的人：{self.witch_saved_player}")
+                lines.append(f" 你救过的人：{self.witch_saved_player}")
             if self.witch_poisoned_player:
-                lines.append(f"☠️ 你毒过的人：{self.witch_poisoned_player}")
+                lines.append(f" 你毒过的人：{self.witch_poisoned_player}")
             lines.append(
                 "（注：以上是你作为女巫的私密视角，公开说出会暴露身份，除非你决定跳女巫）"
             )
@@ -496,19 +471,20 @@ class AIPlayerContext:
         # 重要事件
         if self.game_events:
             lines.append("\n【重要事件】")
-            for event in self.game_events[-10:]:  # 只显示最近10条
-                lines.append(f"- {event}")
+            for event in self.game_events:
+                if event not in last_night_deaths and event not in exile_events:
+                    lines.append(f"- {event}")
 
-        # 发言记录
+        # 发言记录（完整保留，不截断）
         if self.speeches:
             lines.append("\n【发言记录】")
-            for speech in self.speeches[-15:]:  # 只显示最近15条
+            for speech in self.speeches:
                 prefix = "[PK]" if speech.get("is_pk") else ""
-                lines.append(f"{prefix}{speech['player']}: {speech['content'][:100]}")
+                lines.append(f"{prefix}{speech['player']}: {speech['content']}")
 
         # 投票记录（重要！分析投票可以推断阵营）
         if self.vote_history:
-            lines.append("\n🗳️【投票记录 - 分析投票方向可推断阵营！】")
+            lines.append("\n【投票记录 - 分析投票方向可推断阵营！】")
             # 按轮次分组显示
             current_round_votes = [
                 v for v in self.vote_history if v.get("round") == self.current_round
@@ -519,7 +495,7 @@ class AIPlayerContext:
 
             if prev_round_votes:
                 lines.append("历史投票：")
-                for vote in prev_round_votes[-5:]:
+                for vote in prev_round_votes:
                     prefix = "[PK]" if vote.get("is_pk") else ""
                     lines.append(
                         f"  {prefix}第{vote['round']}轮: {vote['voter']} → {vote['target']}"
@@ -531,40 +507,31 @@ class AIPlayerContext:
                     prefix = "[PK]" if vote.get("is_pk") else ""
                     lines.append(f"  {prefix}{vote['voter']} → {vote['target']}")
 
-            lines.append("💡 思考：投同一人的可能是同阵营，保人的要警惕！")
+            lines.append(" 思考：投同一人的可能是同阵营，保人的要警惕！")
 
         # 投票期间讨论（重要！这是投票前的最新观点）
         if self.vote_discussions:
-            current_round_discussions = [
-                d for d in self.vote_discussions if d.get("round") == self.current_round
-            ]
-            if current_round_discussions:
-                lines.append(
-                    "\n💬💬💬【投票期间讨论 - 必读！这是大家投票前的最新观点！】💬💬💬"
-                )
-                lines.append("⚠️ 以下是在投票阶段，大家针对本次投票发表的看法和讨论：")
-                for disc in current_round_discussions:  # 显示全部
-                    lines.append(f"  💭 {disc['player']}：{disc['content'][:120]}")
-                lines.append(
-                    "💡 分析：谁在带节奏？谁在保谁？谁在攻击谁？这些讨论会影响投票结果！"
-                )
+            lines.append("\n【投票期间讨论】")
+            for disc in self.vote_discussions:
+                lines.append(f"第{disc['round']}轮 {disc['player']}：{disc['content']}")
+            lines.append("分析讨论中的立场和依据，注意区分讨论意向与已提交的投票。")
 
-        # 🧠 增强记忆系统 - 记忆摘要
+        #  增强记忆系统 - 记忆摘要
         memory_summary = self.get_memory_summary()
         if memory_summary:
-            lines.append("\n🧠【你的记忆分析 - AI增强记忆系统】")
+            lines.append("\n【你的记忆分析 - AI增强记忆系统】")
             lines.append(memory_summary)
 
         # 轮次总结
         if self.round_summaries:
-            lines.append("\n【📝 游戏轮次总结】")
-            for summary in self.round_summaries[-3:]:  # 只显示最近3轮
+            lines.append("\n【游戏轮次总结】")
+            for summary in self.round_summaries:
                 lines.append(f"- {summary}")
 
         # 个人笔记
         if self.personal_notes:
-            lines.append("\n【📔 你的个人笔记和推理】")
-            for note in self.personal_notes[-5:]:  # 只显示最近5条
+            lines.append("\n【你的个人笔记和推理】")
+            for note in self.personal_notes:
                 lines.append(f"- {note}")
 
         return "\n".join(lines)

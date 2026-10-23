@@ -1,5 +1,6 @@
 """房间管理命令"""
 
+import random
 import re
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -239,10 +240,9 @@ class RoomCommandHandler(BaseCommandHandler):
             yield event.plain_result(f"❌ '{ai_name}' 是保留名称，请换一个！")
             return
 
-        # 检查是否已有同名AI
-        ai_player_id = f"ai_{ai_name}"
-        if room.is_player_in_room(ai_player_id):
-            yield event.plain_result(f"⚠️ AI玩家 {ai_name} 已经在游戏中了！")
+        # Display names must not collide with existing human or AI players.
+        if any(player.name == ai_name for player in room.players.values()):
+            yield event.plain_result(f"⚠️ 玩家名称 {ai_name} 已经在游戏中了！")
             return
 
         # 创建AI玩家配置（使用全局配置的模型）
@@ -300,20 +300,26 @@ class RoomCommandHandler(BaseCommandHandler):
             )
             return
 
-        # 查找AI玩家
-        ai_player_id = f"ai_{target_str}"
-        player = room.get_player(ai_player_id)
+        # Names are independent of opaque AI IDs; accept configured identity names too.
+        player = next(
+            (
+                player
+                for player in room.players.values()
+                if player.is_ai
+                and (
+                    player.name == target_str
+                    or (player.ai_config and player.ai_config.name == target_str)
+                )
+            ),
+            None,
+        )
 
         if not player:
             yield event.plain_result(f"❌ 未找到AI玩家：{target_str}")
             return
 
-        if not player.is_ai:
-            yield event.plain_result(f"❌ {target_str} 不是AI玩家！")
-            return
-
-        # 移除玩家
-        del room.players[ai_player_id]
+        self.game_manager.ai_player_service.clear_player_data(player.id)
+        del room.players[player.id]
 
         yield event.plain_result(
             f"✅ AI玩家 {target_str} 已被踢出！\n\n"
@@ -344,11 +350,34 @@ class RoomCommandHandler(BaseCommandHandler):
 
         # 计算需要添加的AI玩家数量
         needed_ai_count = self.game_manager.config.total_players - room.player_count
-        added_ai_names = []
 
-        for i in range(needed_ai_count):
-            # 生成AI名称（AI1, AI2, ...）
-            ai_name = f"AI{i + 1}"
+        # Normalize and deduplicate the pool, excluding every existing display name.
+        taken_names = {p.name for p in room.players.values()}
+        nickname_pool = list(
+            dict.fromkeys(
+                name.strip()
+                for name in self.game_manager.config.ai_nicknames
+                if isinstance(name, str)
+                and 0 < len(name.strip()) <= 10
+                and name.strip() not in taken_names
+                and name.strip() not in self.AI_NAME_BLACKLIST
+            )
+        )
+        random.shuffle(nickname_pool)
+
+        added_ai_names = []
+        fallback_index = 1
+        for _ in range(needed_ai_count):
+            if nickname_pool:
+                ai_name = nickname_pool.pop()
+            else:
+                # Exhausted pools still produce unique names, including across refills.
+                ai_name = f"玩家{fallback_index}"
+                while ai_name in taken_names:
+                    fallback_index += 1
+                    ai_name = f"玩家{fallback_index}"
+                fallback_index += 1
+            taken_names.add(ai_name)
             # 创建AI玩家配置
             ai_config = AIPlayerConfig(
                 name=ai_name, model_id=self.game_manager.config.ai_player_model

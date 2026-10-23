@@ -79,9 +79,16 @@ class NightCommandHandler(BaseCommandHandler):
             1 for w in human_wolves if w.id in room.vote_state.night_votes
         )
 
+        round_num = room.current_round
         yield event.plain_result(
             f"✅ 你选择了办掉目标！当前 {human_voted_count}/{len(human_wolves)} 名人类狼人已投票"
         )
+        if (
+            self.game_manager.get_room(group_id) is not room
+            or room.phase != GamePhase.NIGHT_WOLF
+            or room.current_round != round_num
+        ):
+            return
 
         # 如果有AI狼人，每次人类狼人投票都触发AI重新决策
         if ai_wolves:
@@ -89,6 +96,12 @@ class NightCommandHandler(BaseCommandHandler):
 
             wolf_phase = NightWolfPhase(self.game_manager)
             await wolf_phase.trigger_ai_wolf_vote(room)
+            if (
+                self.game_manager.get_room(group_id) is not room
+                or room.phase != GamePhase.NIGHT_WOLF
+                or room.current_round != round_num
+            ):
+                return
 
         # 检查是否所有狼人都投票了（包括AI）
         all_voted = len(room.vote_state.night_votes) >= len(alive_wolves)

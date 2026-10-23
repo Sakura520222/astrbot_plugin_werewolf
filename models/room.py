@@ -23,13 +23,15 @@ class VoteState:
     day_votes: dict[str, str] = field(default_factory=dict)  # 白天投票 {玩家ID: 目标ID}
     pk_players: list[str] = field(default_factory=list)  # 平票PK玩家列表
     is_pk_vote: bool = False  # 是否是PK投票
+    settled: bool = False  # Prevent duplicate settlement.
+    generation: int = 0  # Distinguish ordinary votes, PK votes and later rounds.
 
     def clear_night_votes(self) -> None:
         """清空夜晚投票"""
         self.night_votes.clear()
 
     def clear_day_votes(self) -> None:
-        """清空白天投票"""
+        """Clear ballots and PK candidates, retaining the settlement claim."""
         self.day_votes.clear()
         self.pk_players.clear()
         self.is_pk_vote = False
@@ -74,6 +76,8 @@ class GameRoom:
     # 夜晚状态
     last_killed_id: str | None = None  # 上一晚被杀的玩家ID
     seer_checked: bool = False  # 预言家是否已验人
+    night_settling_round: int = -1
+    night_wolf_settling_round: int = -1
     wolf_last_chat_time: float | None = None  # 狼人最后密谋时间戳
     wolf_ai_voted: bool = False  # AI狼人是否已投票
     wolf_ai_chatted: bool = False  # AI狼人是否已密谋（防止重复）
@@ -82,12 +86,20 @@ class GameRoom:
 
     # 白天投票状态
     day_ai_voted: bool = False  # AI白天是否已投票
+    day_ai_task: asyncio.Task | None = field(default=None, repr=False)
+    day_vote_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    speaking_generation: int = 0
+    last_words_generation: int = 0
+    last_words_finishing: bool = False
     vote_discussion: list[dict] = field(
         default_factory=list
     )  # 投票阶段讨论记录 [{player, content}, ...]
 
     # 遗言状态
     last_words_from_vote: bool = False  # 遗言是否来自投票放逐
+    last_words_player_id: str | None = (
+        None  # 当前有权留遗言的玩家ID（由死亡事件显式设置，勿用夜晚字段推断）
+    )
 
     # 子状态
     witch_state: Any = None  # WitchState, 延迟初始化避免循环导入
@@ -135,7 +147,10 @@ class GameRoom:
 
     def get_alive_players(self) -> list[Player]:
         """获取所有存活玩家"""
-        return [p for p in self.players.values() if p.is_alive]
+        return sorted(
+            (p for p in self.players.values() if p.is_alive),
+            key=lambda p: p.number,
+        )
 
     def get_alive_player_ids(self) -> set[str]:
         """获取所有存活玩家ID"""
@@ -267,34 +282,32 @@ class GameRoom:
     # ========== 定时器管理方法 ==========
 
     def cancel_timer(self) -> None:
-        """取消当前所有定时器和异步任务"""
-        # 取消主定时器任务
-        if self.timer_task and not self.timer_task.done():
-            self.timer_task.cancel()
-            self.timer_task = None
-
-        # 取消狼人AI投票任务
-        if (
-            hasattr(self, "wolf_ai_vote_task")
-            and self.wolf_ai_vote_task
-            and not self.wolf_ai_vote_task.done()
+        """Cancel owned tasks without cancelling the current transition task."""
+        try:
+            current = asyncio.current_task()
+        except RuntimeError:
+            current = None
+        for attribute in (
+            "timer_task",
+            "wolf_ai_vote_task",
+            "wolf_ai_process_task",
+            "day_ai_task",
         ):
-            self.wolf_ai_vote_task.cancel()
-            self.wolf_ai_vote_task = None
-
-        # 取消全AI狼人处理任务
-        if (
-            hasattr(self, "wolf_ai_process_task")
-            and self.wolf_ai_process_task
-            and not self.wolf_ai_process_task.done()
-        ):
-            self.wolf_ai_process_task.cancel()
-            self.wolf_ai_process_task = None
+            task = getattr(self, attribute)
+            setattr(self, attribute, None)
+            if task is not None and task is not current and not task.done():
+                task.cancel()
 
     def set_timer(self, task: asyncio.Task) -> None:
-        """设置定时器"""
-        self.cancel_timer()
+        """Replace only the timer, leaving a shared AI worker intact.
+
+        Args:
+            task: Timer task for the current phase.
+        """
+        previous = self.timer_task
         self.timer_task = task
+        if previous and previous is not asyncio.current_task() and not previous.done():
+            previous.cancel()
 
     # ========== 日志方法 ==========
 

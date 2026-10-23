@@ -70,5 +70,5 @@ class WerewolfAction(BaseAction):
 
         response = await self._call_llm(prompt, player)
         if response:
-            return response[:50]
+            return response
         return None

@@ -1,5 +1,6 @@
 """AI复盘服务"""
 
+import re
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -81,7 +82,16 @@ class AIReviewer:
             system_prompt = self._get_default_system_prompt()
             user_prompt = f"请为以下狼人杀游戏生成复盘报告：\n\n{game_data}"
 
-        return system_prompt, user_prompt
+        # Remove emoji only from composed prompts, keeping stored names and logs intact.
+        pattern = (
+            r"[\U0001F000-\U0001FAFF\U0001FC00-\U0001FFFD"
+            r"☀-➿⬀-⯿↔-↙↩↪"
+            r"⌚⌛⌨⏏⏩-⏳⏸-⏺"
+            r"Ⓜ▪▫▶◀◻-◾"
+            r"©®‼⁉™ℹ〰〽"
+            r"㊗㊙‍⃣︎️\U000E0020-\U000E007F]"
+        )
+        return re.sub(pattern, "", system_prompt), re.sub(pattern, "", user_prompt)
 
     def _get_default_system_prompt(self) -> str:
         """获取默认系统提示词"""
@@ -91,17 +101,15 @@ class AIReviewer:
             "1. 分析关键决策点和转折点\n"
             "2. 评价各阵营的策略和失误\n"
             "3. 指出精彩的操作和值得学习的地方\n"
-            "4. 游戏日志中包含了狼人夜晚的密谋内容（标记为「💬 XXX（狼人）密谋：...」），"
+            "4. 游戏日志中包含了狼人夜晚的密谋内容（标记为「XXX（狼人）密谋：...」），"
             "如果有精彩、搞笑或关键的狼人聊天，可以适当引用原文，增加复盘的趣味性和真实感\n"
             "5. 评选出本局MVP（表现最好的玩家）和本局超级划水玩家（存在感最低/失误最多的玩家）\n"
-            "6. 语言风格轻松幽默，但分析要专业深入\n"
-            "7. 控制在1000字以内\n"
-            "8. 使用emoji让内容更生动\n\n"
+            "6. 语言风格轻松幽默，但分析要专业深入\n\n"
             "输出格式参考：\n"
             "[复盘分析内容]\n"
-            "[如有精彩的狼人聊天，可在此引用，格式：💬 「XXX：原话内容」]\n\n"
-            "🏆 本局MVP：[玩家昵称] - [简短理由]\n"
-            "💤 本局超级划水：[玩家昵称] - [简短理由]"
+            "[如有精彩的狼人聊天，可在此引用，格式：「XXX：原话内容」]\n\n"
+            "本局MVP：[玩家昵称] - [理由]\n"
+            "本局超级划水：[玩家昵称] - [理由]"
         )
 
     def _format_game_data(self, room: "GameRoom", winning_faction: str) -> str:

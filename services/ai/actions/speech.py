@@ -4,14 +4,11 @@ import random
 import re
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
 from ..context import BehaviorAnalyzer, ContextBuilder, SituationAnalyzer
 from ..prompts import (
     ANTI_HALLUCINATION_PROTOCOL,
     HUMAN_STYLE_TIPS,
     LAST_WORDS_TIPS,
-    PERSONALITY_TEMPLATES,
     PK_TIPS,
     ROLE_PROMPTS,
     ROLE_SOUL_SETTINGS,
@@ -25,18 +22,6 @@ if TYPE_CHECKING:
 
 class SpeechAction(BaseAction):
     """发言行动"""
-
-    def __init__(self, context):
-        super().__init__(context)
-        self._player_personalities = {}
-
-    def _get_player_personality(self, player: "Player") -> str:
-        """获取或分配玩家性格"""
-        if player.id not in self._player_personalities:
-            personality_key = random.choice(list(PERSONALITY_TEMPLATES.keys()))
-            self._player_personalities[player.id] = personality_key
-            logger.info(f"[狼人杀AI] 为 {player.name} 分配性格: {personality_key}")
-        return PERSONALITY_TEMPLATES[self._player_personalities[player.id]]
 
     async def generate_speech(
         self, player: "Player", room: "GameRoom", is_pk: bool = False
@@ -70,7 +55,7 @@ class SpeechAction(BaseAction):
             context += "\n" + memory_guidance
 
         # 添加自我认知提醒
-        context += f"\n【🆔 自我认知提醒】\n你是{player.number}号玩家{player.display_name}，发言时请先报编号！"
+        context += f"\n【自我认知提醒】\n你是{player.number}号玩家{player.display_name}，发送时系统会添加玩家前缀，无需重复报编号。"
 
         if is_pk:
             pk_tips = PK_TIPS.get(role_key, PK_TIPS["villager"])
@@ -89,16 +74,16 @@ class SpeechAction(BaseAction):
                 and player.ai_context
                 and player.ai_context.current_round == 1
             ):
-                speech_tips = """【👨‍🌾 村民首日发言】
-⚠️ 这是第一天，信息量较少，不要过度推理或编造不存在的信息！
+                speech_tips = """【村民首日发言】
+这是第一天，信息量较少，不要过度推理或编造不存在的信息！
 
-🗣️ 首日发言建议：
+首日发言建议：
 1. 如果还没有人发言：简单表态，等待信息
 2. 如果已有少量发言：简单评价，不要过度分析
 3. 如果有预言家跳出：可以表态支持或怀疑，但要基于实际发言
 4. 严禁编造"昨天"、"前一天"等虚假信息
 
-💡 记住：根据已有的发言内容发言，不要分析不存在的事情！"""
+记住：根据已有的发言内容发言，不要分析不存在的事情！"""
             else:
                 speech_tips = SPEECH_TIPS.get(role_key, SPEECH_TIPS["villager"])
 
@@ -123,7 +108,7 @@ class SpeechAction(BaseAction):
                 response,
                 flags=re.IGNORECASE,
             )
-            return response[:300]
+            return response
 
         defaults = [
             "我先听听大家怎么说吧",
@@ -138,7 +123,7 @@ class SpeechAction(BaseAction):
             return ""
 
         ctx = player.ai_context
-        lines = ["【🧠 记忆系统决策指导】"]
+        lines = ["【记忆系统决策指导】"]
 
         # 基于怀疑度分析
         if ctx.player_suspicions:
@@ -148,8 +133,8 @@ class SpeechAction(BaseAction):
                 if info.get("level", 0) >= 7
             ]
             if high_suspicion:
-                lines.append("🎯 高怀疑度目标（可能是狼）：")
-                for player_name, suspicion in high_suspicion[:3]:
+                lines.append(" 高怀疑度目标（可能是狼）：")
+                for player_name, suspicion in high_suspicion:
                     reason = suspicion.get("reason", "")
                     lines.append(f"- {player_name}: {reason}")
 
@@ -161,7 +146,7 @@ class SpeechAction(BaseAction):
                 if info.get("type") == "werewolf" and info.get("confidence", 0) >= 0.8
             ]
             if confirmed_wolves:
-                lines.append("🐺 确认的狼人目标：")
+                lines.append(" 确认的狼人目标：")
                 for player_name, alliance in confirmed_wolves:
                     confidence = alliance.get("confidence", 0)
                     lines.append(f"- {player_name} (置信度: {confidence:.1f})")
@@ -185,8 +170,8 @@ class SpeechAction(BaseAction):
                     suspicious_patterns.append(f"{player_name}: 发言过短，可能划水")
 
             if suspicious_patterns:
-                lines.append("🗣️ 可疑发言模式：")
-                lines.extend(f"- {pattern}" for pattern in suspicious_patterns[:3])
+                lines.append(" 可疑发言模式：")
+                lines.extend(f"- {pattern}" for pattern in suspicious_patterns)
 
         # 基于投票模式
         if ctx.voting_patterns:
@@ -200,8 +185,8 @@ class SpeechAction(BaseAction):
                     inconsistent_voters.append(f"{player_name}: 投票分散，可能隐藏身份")
 
             if inconsistent_voters:
-                lines.append("🗳️ 可疑投票模式：")
-                lines.extend(f"- {voter}" for voter in inconsistent_voters[:3])
+                lines.append(" 可疑投票模式：")
+                lines.extend(f"- {voter}" for voter in inconsistent_voters)
 
         # 基于关键事件记忆
         if ctx.key_events_memory:
@@ -212,21 +197,21 @@ class SpeechAction(BaseAction):
                 and event.get("round", 0) >= ctx.current_round - 1
             ]
             if recent_critical:
-                lines.append("⭐ 最近关键事件：")
-                for event in recent_critical[:2]:
+                lines.append(" 最近关键事件：")
+                for event in recent_critical:
                     event_desc = event.get("event", "")
                     lines.append(f"- {event_desc}")
 
         # 角色特定指导
         role_key = ContextBuilder.get_role_key(player)
         if role_key == "werewolf":
-            lines.append("🐺 狼人策略提醒：")
+            lines.append(" 狼人策略提醒：")
             lines.append("- 保护队友，不要暴露狼人身份")
             lines.append("- 引导投票，将目标对准好人")
             if ctx.werewolf_teammates:
                 lines.append(f"- 你的队友是：{', '.join(ctx.werewolf_teammates)}")
         elif role_key == "seer" and ctx.seer_results:
-            lines.append("🔮 预言家策略提醒：")
+            lines.append(" 预言家策略提醒：")
             for result in ctx.seer_results:
                 target = result.get("target", "")
                 is_wolf = result.get("is_werewolf", False)
@@ -235,7 +220,7 @@ class SpeechAction(BaseAction):
                     f"- {target}是{status}，应该{'放逐' if is_wolf else '保护'}"
                 )
         elif role_key == "witch":
-            lines.append("🧪 女巫策略提醒：")
+            lines.append(" 女巫策略提醒：")
             lines.append(f"- 解药：{'已用' if ctx.witch_antidote_used else '可用'}")
             lines.append(f"- 毒药：{'已用' if ctx.witch_poison_used else '可用'}")
 
@@ -258,11 +243,12 @@ class SpeechAction(BaseAction):
                 for r in player.ai_context.seer_results
             ]
             last_words_tips += (
-                f"\n\n🔮 【重要】你的查验记录：{'; '.join(results)}\n务必全部公布出来！"
+                f"\n\n 【重要】你的查验记录：{'; '.join(results)}\n务必全部公布出来！"
             )
 
         prompt = ROLE_PROMPTS["last_words"].format(
             anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
+            personality=self._get_player_personality(player),
             context=context,
             role_name=role_name,
             last_words_tips=last_words_tips,
@@ -271,6 +257,6 @@ class SpeechAction(BaseAction):
 
         response = await self._call_llm(prompt, player)
         if response:
-            return response[:100]
+            return response
 
         return "我没什么好说的了，祝大家好运。"

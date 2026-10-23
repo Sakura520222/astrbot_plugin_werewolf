@@ -51,12 +51,32 @@ class TargetValidator:
 
     @staticmethod
     def validate_vote_target(
-        room: "GameRoom", target_number: int, voter: "Player"
+        room: "GameRoom",
+        target_number: int,
+        voter: "Player",
+        allowed_numbers: list[int] | None = None,
     ) -> int | None:
-        """验证投票目标"""
+        """验证投票目标
+
+        Args:
+            room: 游戏房间
+            target_number: 目标玩家编号
+            voter: 投票的玩家
+            allowed_numbers: PK投票时允许的候选编号列表，None 表示不限制
+
+        Returns:
+            目标有效返回编号，否则返回 None
+        """
         # 不能投自己
         if target_number == voter.number:
             logger.warning(f"[AI验证] {voter.display_name} 尝试投自己，拒绝")
+            return None
+
+        # PK投票只能投给候选人
+        if allowed_numbers is not None and target_number not in allowed_numbers:
+            logger.warning(
+                f"[AI验证] {voter.display_name} PK投票目标 {target_number}号 不在候选名单，拒绝"
+            )
             return None
 
         return TargetValidator.validate_target(room, target_number, "投票")

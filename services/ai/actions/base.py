@@ -1,6 +1,7 @@
 """行动基类 - 所有AI行动的基础"""
 
 import asyncio
+import random
 import re
 from typing import TYPE_CHECKING
 
@@ -15,8 +16,33 @@ class BaseAction:
 
     LLM_TIMEOUT_SECONDS = 30
 
-    def __init__(self, context):
+    def __init__(self, context, personality_cache: dict[str, str] | None = None):
         self.context = context
+        self._player_personalities = (
+            personality_cache if personality_cache is not None else {}
+        )
+
+    def _get_player_personality(self, player: "Player") -> str:
+        """Reuse the player's personality across speech, votes, and last words.
+
+        Args:
+            player: Player whose context or shared cache supplies the personality.
+
+        Returns:
+            The personality prompt, assigned once if necessary.
+        """
+        from ..prompts import PERSONALITY_TEMPLATES
+
+        if player.ai_context and player.ai_context.personality:
+            return player.ai_context.personality
+        if player.id not in self._player_personalities:
+            self._player_personalities[player.id] = random.choice(
+                list(PERSONALITY_TEMPLATES)
+            )
+        personality = PERSONALITY_TEMPLATES[self._player_personalities[player.id]]
+        if player.ai_context:
+            player.ai_context.personality = personality
+        return personality
 
     def _get_provider(self, model_id: str = ""):
         """获取LLM provider"""
@@ -52,12 +78,24 @@ class BaseAction:
             logger.error("[狼人杀AI] 无法获取LLM provider")
             return None
 
+        # Sanitize only the composed prompt, never player names or stored records.
+        prompt = re.sub(
+            r"[\U0001F000-\U0001FAFF\U0001FC00-\U0001FFFD"
+            r"☀-➿⬀-⯿↔-↙↩↪"
+            r"⌚⌛⌨⏏⏩-⏳⏸-⏺"
+            r"Ⓜ▪▫▶◀◻-◾"
+            r"©®‼⁉™ℹ〰〽"
+            r"㊗㊙‍⃣︎️\U000E0020-\U000E007F]",
+            "",
+            prompt,
+        )
+
         for attempt in range(max_retries):
             try:
                 response = await asyncio.wait_for(
                     provider.text_chat(
                         prompt=prompt,
-                        system_prompt="你是一个沉浸式狼人杀玩家。你必须完全代入你的角色，像真人一样说话，绝对不能暴露你是AI。回复要简洁自然，像在群里聊天。",
+                        system_prompt="你是一个沉浸式狼人杀玩家。你必须完全代入你的角色，像真人一样说话，绝对不能暴露你是AI。回复要自然，像在群里聊天。",
                     ),
                     timeout=timeout,
                 )
@@ -65,7 +103,7 @@ class BaseAction:
                 if response.result_chain:
                     result = response.result_chain.get_plain_text().strip()
                     if result:  # 只有非空结果才返回
-                        logger.info(f"[狼人杀AI] {player.name} 决策: {result[:100]}")
+                        logger.info(f"[Werewolf AI] {player.name} decision: {result}")
                         return result
                     else:
                         logger.warning(

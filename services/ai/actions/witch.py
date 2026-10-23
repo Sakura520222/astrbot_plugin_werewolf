@@ -32,12 +32,12 @@ class WitchAction(BaseAction):
         available_actions = []
         if killed_player_name and can_save:
             available_actions.append(
-                f"💊 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他"
+                f" 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他"
             )
         if can_poison:
-            available_actions.append("☠️ 你可以使用【毒药】毒死一个人")
+            available_actions.append(" 你可以使用【毒药】毒死一个人")
         if not available_actions:
-            available_actions.append("❌ 你的药都用完了，今晚无法行动")
+            available_actions.append(" 你的药都用完了，今晚无法行动")
 
         prompt = ROLE_PROMPTS["witch_action"].format(
             anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
