@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from ..utils import cmd
 from .base import BaseRole
 
 if TYPE_CHECKING:
@@ -48,10 +49,10 @@ class SeerRole(BaseRole):
             f"你的目标：{self.goal}！\n\n"
             f"📋 可验证玩家列表：\n{players_list}\n\n"
             f"💡 夜晚私聊使用命令：\n"
-            f"/验人 编号\n"
-            f"示例：/验人 {example_number}\n\n"
+            f"{cmd('验人')} 编号\n"
+            f"示例：{cmd('验人')} {example_number}\n\n"
             f"⚠️ 注意：每晚只能验证一个人！"
         )
 
     def get_night_commands(self) -> list[str]:
-        return ["/验人 编号"]
+        return [f"{cmd('验人')} 编号"]

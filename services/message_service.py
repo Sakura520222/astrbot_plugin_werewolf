@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 from astrbot.api import logger
 from astrbot.core.message.message_event_result import MessageChain
 
+from ..utils import cmd
+
 if TYPE_CHECKING:
     from ..models import GameRoom, Player
 
@@ -95,9 +97,9 @@ class MessageService:
             "🌙 游戏开始！天黑请闭眼...\n\n"
             "角色已分配完毕！\n\n"
             "机器人正在私聊告知各位身份...\n"
-            "如未收到私聊，请使用：/查角色\n\n"
-            "🐺 狼人请私聊使用：/办掉 编号\n"
-            "🔮 预言家请等待狼人行动完成后使用：/验人 编号\n"
+            f"如未收到私聊，请使用：{cmd('查角色')}\n\n"
+            f"🐺 狼人请私聊使用：{cmd('办掉')} 编号\n"
+            f"🔮 预言家请等待狼人行动完成后使用：{cmd('验人')} 编号\n"
             "⏰ 剩余时间：2分钟"
         )
         return await self.send_group_message(room, text)
@@ -106,7 +108,7 @@ class MessageService:
         """公告夜晚开始"""
         text = (
             "🌙 夜晚降临，天黑请闭眼...\n\n"
-            "🐺 狼人请私聊使用：/办掉 编号\n"
+            f"🐺 狼人请私聊使用：{cmd('办掉')} 编号\n"
             "🔮 预言家请等待狼人行动完成\n"
             "⏰ 剩余时间：2分钟"
         )
@@ -115,7 +117,9 @@ class MessageService:
     async def announce_seer_phase(self, room: "GameRoom") -> bool:
         """公告预言家验人阶段"""
         text = (
-            "🔮 狼人行动完成！\n预言家请私聊机器人验人：/验人 编号\n⏰ 剩余时间：2分钟"
+            "🔮 狼人行动完成！\n"
+            f"预言家请私聊机器人验人：{cmd('验人')} 编号\n"
+            "⏰ 剩余时间：2分钟"
         )
         return await self.send_group_message(room, text)
 
@@ -161,7 +165,7 @@ class MessageService:
         text = (
             "📊 发言环节结束！现在进入投票阶段！\n\n"
             "请所有存活玩家使用命令：\n"
-            "/投票 编号\n\n"
+            f"{cmd('投票')} 编号\n\n"
             f"当前存活人数：{room.alive_count}\n"
             "⏰ 剩余时间：2分钟"
         )
@@ -184,7 +188,7 @@ class MessageService:
             "⚠️ 只能投给以下平票玩家：\n"
             + "\n".join([f"  • {name}" for name in pk_names])
             + "\n\n⏰ 投票时间：2分钟\n"
-            + "💡 使用 /投票 编号"
+            + f"💡 使用 {cmd('投票')} 编号"
         )
         return await self.send_group_message(room, text)
 
@@ -263,6 +267,6 @@ class MessageService:
         text = (
             f"⏰ 投票倒计时：还有30秒！\n\n"
             f"当前投票进度：{voted}/{total}\n"
-            f"💡 请尚未投票的玩家抓紧时间：/投票 编号"
+            f"💡 请尚未投票的玩家抓紧时间：{cmd('投票')} 编号"
         )
         return await self.send_group_message(room, text)

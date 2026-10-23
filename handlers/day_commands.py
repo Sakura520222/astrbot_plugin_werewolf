@@ -7,6 +7,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ..models import GamePhase
+from ..utils import cmd, get_command_prefix
 from .base import BaseCommandHandler
 
 if TYPE_CHECKING:
@@ -142,7 +143,9 @@ class DayCommandHandler(BaseCommandHandler):
         player_id = event.get_sender_id()
 
         if room.phase != GamePhase.DAY_VOTE:
-            yield event.plain_result("⚠️ 现在不是投票阶段！使用 /开始投票 进入投票")
+            yield event.plain_result(
+                f"⚠️ 现在不是投票阶段！使用 {cmd('开始投票')} 进入投票"
+            )
             return
 
         if not room.is_player_in_room(player_id):
@@ -157,7 +160,7 @@ class DayCommandHandler(BaseCommandHandler):
         target_str = self.get_target_user(event)
         if not target_str:
             yield event.plain_result(
-                "❌ 请指定投票目标！\n使用：/投票 编号\n示例：/投票 2"
+                f"❌ 请指定投票目标！\n使用：{cmd('投票')} 编号\n示例：{cmd('投票')} 2"
             )
             return
 
@@ -227,12 +230,14 @@ class DayCommandHandler(BaseCommandHandler):
             return
 
         if room.phase != GamePhase.DAY_VOTE:
-            yield event.plain_result("⚠️ 现在不是投票阶段！使用 /开始投票 进入投票")
+            yield event.plain_result(
+                f"⚠️ 现在不是投票阶段！使用 {cmd('开始投票')} 进入投票"
+            )
             return
 
         # 只有房主或AI投票指令才能触发
         player_id = event.get_sender_id()
-        if event.get_message_outline().strip() != "/AI投票":
+        if event.get_message_outline().strip() != cmd("AI投票"):
             if room.creator_id != player_id:
                 yield event.plain_result("⚠️ 只有房主才能使用此命令！")
                 return
@@ -288,7 +293,7 @@ class DayCommandHandler(BaseCommandHandler):
         message_text = event.get_message_outline()
 
         # 排除命令
-        if message_text.startswith("/"):
+        if message_text.startswith(get_command_prefix()):
             return
 
         if not message_text.strip():

@@ -2,6 +2,7 @@
 
 from PIL import Image, ImageDraw
 
+from ..utils import get_command_prefix
 from .gradient_utils import create_vertical_gradient
 from .styles import (
     COLOR_BACKGROUND_BOT,
@@ -28,8 +29,8 @@ ROLE_CONFIG = {
         "camp_color": COLOR_EVIL_CAMP,
         "desc": "每晚可以与同伴一起选择一名玩家袭击",
         "tips": [
-            "• 与队友统一目标后私聊 /办掉 编号",
-            "• 使用 /密谋 消息 与队友交流",
+            "• 与队友统一目标后私聊 {prefix}办掉 编号",
+            "• 使用 {prefix}密谋 消息 与队友交流",
             "• 白天隐藏身份，引导投票",
         ],
     },
@@ -194,7 +195,12 @@ def draw_role_card(
     # 技能列表
     tip_y = card_y0 + 38
     for tip in tips:
-        draw.text((card_x0 + 15, tip_y), tip, fill=COLOR_TEXT_DIM, font=tip_font)
+        draw.text(
+            (card_x0 + 15, tip_y),
+            tip.format(prefix=get_command_prefix()),
+            fill=COLOR_TEXT_DIM,
+            font=tip_font,
+        )
         tip_y += 24
 
     y = card_y1 + 15

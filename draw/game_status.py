@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from PIL import Image, ImageDraw
 
+from ..utils import cmd
 from .gradient_utils import create_vertical_gradient
 from .styles import (
     COLOR_ALIVE,
@@ -173,7 +174,7 @@ def draw_game_status(
 
     # 底部提示
     footer_y = y + rows * (card_height + 10) + 25
-    tip_text = "🎮 使用 /狼人杀帮助 查看完整命令"
+    tip_text = f"🎮 使用 {cmd('狼人杀帮助')} 查看完整命令"
     draw.text(
         (width // 2, footer_y),
         tip_text,

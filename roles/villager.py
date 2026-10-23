@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from ..utils import cmd
 from .base import BaseRole
 
 if TYPE_CHECKING:
@@ -39,7 +40,7 @@ class VillagerRole(BaseRole):
             f"🎭 游戏开始！你的角色是：\n\n"
             f"{self.emoji} {self.name}\n\n"
             f"你的目标：{self.goal}！\n"
-            f"白天投票时使用 /投票 编号 放逐可疑玩家。"
+            f"白天投票时使用 {cmd('投票')} 编号 放逐可疑玩家。"
         )
 
     def get_night_commands(self) -> list[str]:

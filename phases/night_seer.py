@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from astrbot.api import logger
 
 from ..models import GamePhase, Role
+from ..utils import cmd
 from .base import BasePhase
 
 if TYPE_CHECKING:
@@ -119,8 +120,8 @@ class NightSeerPhase(BasePhase):
             f"🔮 预言家验人阶段\n\n"
             f"轮到你行动了！请选择一名玩家查验身份。\n\n"
             f"📋 可查验的玩家：\n{player_list}\n\n"
-            f"💡 使用命令：/验人 编号\n"
-            f"例如：/验人 3"
+            f"💡 使用命令：{cmd('验人')} 编号\n"
+            f"例如：{cmd('验人')} 3"
         )
 
         await self.message_service.send_private_message(room, seer.id, prompt)

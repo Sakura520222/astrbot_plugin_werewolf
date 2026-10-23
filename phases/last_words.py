@@ -60,7 +60,7 @@ class LastWordsPhase(BasePhase):
         await self.message_service.send_group_at_message(
             room,
             killed_player,
-            " 现在请你留遗言\n\n⏰ 遗言时间：2分钟\n💡 遗言完毕后请使用：/遗言完毕",
+            " 现在请你留遗言\n\n⏰ 遗言时间：2分钟\n💡 遗言完毕后请使用：{cmd('遗言完毕')}",
         )
 
         # 启动定时器

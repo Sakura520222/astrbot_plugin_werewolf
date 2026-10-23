@@ -9,6 +9,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ..roles import RoleFactory
+from ..utils import cmd
 from .base import BaseCommandHandler
 
 if TYPE_CHECKING:
@@ -117,25 +118,25 @@ class QueryCommandHandler(BaseCommandHandler):
             help_text = (
                 "📖 狼人杀游戏 - 命令列表\n\n"
                 "基础命令：\n"
-                "  /创建房间 - 创建游戏房间\n"
-                "  /加入房间 - 加入房间\n"
-                "  /开始游戏 - 开始游戏（房主）\n"
-                "  /查角色 - 查看角色（私聊）\n"
-                "  /游戏状态 - 查看游戏状态\n"
-                "  /编号 - 查看所有玩家编号\n"
-                "  /结束游戏 - 结束游戏（房主）\n\n"
+                f"  {cmd('创建房间')} - 创建游戏房间\n"
+                f"  {cmd('加入房间')} - 加入房间\n"
+                f"  {cmd('开始游戏')} - 开始游戏（房主）\n"
+                f"  {cmd('查角色')} - 查看角色（私聊）\n"
+                f"  {cmd('游戏状态')} - 查看游戏状态\n"
+                f"  {cmd('编号')} - 查看所有玩家编号\n"
+                f"  {cmd('结束游戏')} - 结束游戏（房主）\n\n"
                 f"游戏命令（使用编号1-{config.total_players}）：\n"
-                "  /办掉 编号 - 狼人夜晚办掉（如：/办掉 1）\n"
-                "  /密谋 消息 - 狼人与队友交流\n"
-                "  /验人 编号 - 预言家查验（如：/验人 3）\n"
-                "  /毒人 编号 - 女巫使用毒药（如：/毒人 5）\n"
-                "  /救人 - 女巫使用解药\n"
-                "  /不操作 - 女巫不使用道具\n"
-                "  /开枪 编号 - 猎人开枪带走（如：/开枪 2）\n"
-                "  /发言完毕 - 发言说完\n"
-                "  /遗言完毕 - 遗言说完\n"
-                "  /投票 编号 - 白天投票放逐（如：/投票 2）\n"
-                "  /开始投票 - 跳过发言直接投票（房主）\n\n"
+                f"  {cmd('办掉')} 编号 - 狼人夜晚办掉（如：{cmd('办掉')} 1）\n"
+                f"  {cmd('密谋')} 消息 - 狼人与队友交流\n"
+                f"  {cmd('验人')} 编号 - 预言家查验（如：{cmd('验人')} 3）\n"
+                f"  {cmd('毒人')} 编号 - 女巫使用毒药（如：{cmd('毒人')} 5）\n"
+                f"  {cmd('救人')} - 女巫使用解药\n"
+                f"  {cmd('不操作')} - 女巫不使用道具\n"
+                f"  {cmd('开枪')} 编号 - 猎人开枪带走（如：{cmd('开枪')} 2）\n"
+                f"  {cmd('发言完毕')} - 发言说完\n"
+                f"  {cmd('遗言完毕')} - 遗言说完\n"
+                f"  {cmd('投票')} 编号 - 白天投票放逐（如：{cmd('投票')} 2）\n"
+                f"  {cmd('开始投票')} - 跳过发言直接投票（房主）\n\n"
                 "游戏规则：\n"
                 f"• {config.total_players}人局：{config.werewolf_count}狼人 + {config.god_count}神 + {config.villager_count}平民\n"
                 f"• 使用编号（1-{config.total_players}号）代替QQ号\n"

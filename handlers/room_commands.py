@@ -8,6 +8,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ..models import AIPlayerConfig, GamePhase
+from ..utils import cmd
 from .base import BaseCommandHandler
 
 if TYPE_CHECKING:
@@ -63,9 +64,9 @@ class RoomCommandHandler(BaseCommandHandler):
                 f"• 遗言规则：第一晚被狼杀有遗言，投票放逐有遗言，被毒无遗言\n"
                 f"• 猎人：被狼杀或投票放逐可开枪，被毒不能开枪\n"
                 f"• 游戏结束后生成AI复盘报告\n\n"
-                f"💡 使用 /加入房间 来参与游戏\n"
-                f"🤖 使用 /（机器人名字）加入 让AI玩家加入\n"
-                f"👥 {config.total_players}人齐全后，房主使用 /开始游戏"
+                f"💡 使用 {cmd('加入房间')} 来参与游戏\n"
+                f"🤖 使用 {cmd('（机器人名字）加入')} 让AI玩家加入\n"
+                f"👥 {config.total_players}人齐全后，房主使用 {cmd('开始游戏')}"
             )
         except Exception as e:
             logger.error(f"[狼人杀] 创建房间失败: {e}")
@@ -81,7 +82,9 @@ class RoomCommandHandler(BaseCommandHandler):
 
             room = self.game_manager.get_room(group_id)
             if not room:
-                yield event.plain_result("❌ 当前群未创建房间！请使用 /创建房间")
+                yield event.plain_result(
+                    f"❌ 当前群未创建房间！请使用 {cmd('创建房间')}"
+                )
                 return
 
             if room.phase != GamePhase.WAITING:
@@ -147,9 +150,9 @@ class RoomCommandHandler(BaseCommandHandler):
                 "🌙 游戏开始！天黑请闭眼...\n\n"
                 "角色已分配完毕！\n\n"
                 "机器人正在私聊告知各位身份...\n"
-                "如未收到私聊，请使用：/查角色\n\n"
-                "🐺 狼人请私聊使用：/办掉 编号\n"
-                "🔮 预言家请等待狼人行动完成后使用：/验人 编号\n"
+                f"如未收到私聊，请使用：{cmd('查角色')}\n\n"
+                f"🐺 狼人请私聊使用：{cmd('办掉')} 编号\n"
+                f"🔮 预言家请等待狼人行动完成后使用：{cmd('验人')} 编号\n"
                 "⏰ 剩余时间：2分钟"
             )
 
@@ -198,7 +201,7 @@ class RoomCommandHandler(BaseCommandHandler):
 
         room = self.game_manager.get_room(group_id)
         if not room:
-            yield event.plain_result("❌ 当前群未创建房间！请使用 /创建房间")
+            yield event.plain_result(f"❌ 当前群未创建房间！请使用 {cmd('创建房间')}")
             return
 
         if room.phase != GamePhase.WAITING:
@@ -216,7 +219,9 @@ class RoomCommandHandler(BaseCommandHandler):
         # 匹配 /xxx加入 或 xxx加入 格式
         match = re.match(r"^[/／]?(.+?)加入$", message_text)
         if not match:
-            yield event.plain_result("❌ 无法识别AI名称！\n使用格式：/小咪加入")
+            yield event.plain_result(
+                f"❌ 无法识别AI名称！\n使用格式：{cmd('小咪加入')}"
+            )
             return
 
         ai_name = match.group(1).strip()
@@ -291,7 +296,7 @@ class RoomCommandHandler(BaseCommandHandler):
             yield event.plain_result(
                 f"❌ 请指定要踢出的AI名称！\n\n"
                 f"当前AI玩家：\n{ai_list}\n\n"
-                f"使用格式：/踢出AI 小咪"
+                f"使用格式：{cmd('踢出AI')} 小咪"
             )
             return
 
@@ -324,7 +329,7 @@ class RoomCommandHandler(BaseCommandHandler):
 
         room = self.game_manager.get_room(group_id)
         if not room:
-            yield event.plain_result("❌ 当前群未创建房间！请使用 /创建房间")
+            yield event.plain_result(f"❌ 当前群未创建房间！请使用 {cmd('创建房间')}")
             return
 
         if room.phase != GamePhase.WAITING:
@@ -357,5 +362,5 @@ class RoomCommandHandler(BaseCommandHandler):
             + "\n".join([f"  • {name}" for name in added_ai_names])
             + "\n\n"
             + f"当前人数：{room.player_count}/{self.game_manager.config.total_players}\n\n"
-            + "👥 房间已满！房主可以使用 /开始游戏 开始游戏了！"
+            + f"👥 房间已满！房主可以使用 {cmd('开始游戏')} 开始游戏了！"
         )

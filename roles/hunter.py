@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from ..utils import cmd
 from .base import BaseRole
 
 if TYPE_CHECKING:
@@ -81,12 +82,12 @@ class HunterRole(BaseRole):
             f"• 被女巫毒死时不能开枪（死的太突然）\n\n"
             f"📋 可选目标列表：\n{players_list}\n\n"
             f"💡 当你死亡时（非毒死），私聊使用命令：\n"
-            f"  /开枪 编号 - 带走一个人\n"
-            f"示例：/开枪 1"
+            f"  {cmd('开枪')} 编号 - 带走一个人\n"
+            f"示例：{cmd('开枪')} 1"
         )
 
     def get_night_commands(self) -> list[str]:
-        return ["/开枪 编号"]
+        return [f"{cmd('开枪')} 编号"]
 
     def get_death_prompt(self, death_type: HunterDeathType) -> str:
         """获取死亡时的开枪提示"""
@@ -101,7 +102,7 @@ class HunterRole(BaseRole):
             f"💀 {reason}\n\n"
             f"🔫 你可以选择开枪带走一个人！\n\n"
             f"请私聊使用命令：\n"
-            f"  /开枪 编号\n"
-            f"示例：/开枪 1\n\n"
+            f"  {cmd('开枪')} 编号\n"
+            f"示例：{cmd('开枪')} 1\n\n"
             f"⏰ 限时2分钟"
         )

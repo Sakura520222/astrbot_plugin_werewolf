@@ -6,6 +6,7 @@ from astrbot.api import logger
 
 from ..models import GamePhase
 from ..services import BanService
+from ..utils import cmd
 from .base import BasePhase
 
 if TYPE_CHECKING:
@@ -171,7 +172,7 @@ class DaySpeakingPhase(BasePhase):
             player,
             f" 现在轮到你发言\n\n"
             f"⏰ 发言时间：2分钟\n"
-            f"💡 发言完毕后请使用：/发言完毕\n\n"
+            f"💡 发言完毕后请使用：{cmd('发言完毕')}\n\n"
             f"进度：{speaking.current_index + 1}/{len(speaking.order)}",
         )
 
@@ -257,7 +258,7 @@ class DaySpeakingPhase(BasePhase):
             player,
             f" PK发言：现在轮到你发言\n\n"
             f"⏰ 发言时间：2分钟\n"
-            f"💡 发言完毕后请使用：/发言完毕\n\n"
+            f"💡 发言完毕后请使用：{cmd('发言完毕')}\n\n"
             f"进度：{speaking.current_index + 1}/{len(pk_players)}",
         )
 
