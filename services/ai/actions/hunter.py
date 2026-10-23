@@ -1,12 +1,7 @@
-"""猎人行动 - 开枪决策"""
+"""Only an actually pending hunter opportunity can produce a shot."""
 
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
-from ..context import ContextBuilder
-from ..prompts import ANTI_HALLUCINATION_PROTOCOL, ROLE_PROMPTS, ROLE_SOUL_SETTINGS
-from ..validators import TargetValidator
 from .base import BaseAction
 
 if TYPE_CHECKING:
@@ -14,31 +9,24 @@ if TYPE_CHECKING:
 
 
 class HunterAction(BaseAction):
-    """猎人行动"""
+    """Respect poison, already used shots and explicit refusal."""
 
     async def decide_shoot(self, player: "Player", room: "GameRoom") -> int | None:
-        """AI猎人决定开枪目标"""
-        context = ContextBuilder.build_context(player, room)
-        role_key = ContextBuilder.get_role_key(player)
-        soul_setting = ROLE_SOUL_SETTINGS.get(role_key, "")
+        """Choose a legal target only while the system grants a shot.
 
-        prompt = ROLE_PROMPTS["hunter_shoot"].format(
-            anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
-            soul_setting=soul_setting,
-            context=context,
-        )
+        Args:
+            player: Hunter with a pending opportunity.
+            room: Current room.
 
-        response = await self._call_llm(prompt, player)
-        if response:
-            if "不开枪" in response or "不开" in response:
-                return None
-            target = self.extract_number(response)
-            if target:
-                # 验证开枪目标
-                validated = TargetValidator.validate_kill_target(room, target, player)
-                if validated:
-                    return validated
-                logger.warning(
-                    f"[狼人杀AI] 猎人 {player.name} 选择的目标 {target} 无效，取消开枪"
-                )
-        return None
+        Returns:
+            Target number, or None for refusal, invalid opportunity or failure.
+        """
+        if (
+            not player.role
+            or player.role.value != "hunter"
+            or room.hunter_state.pending_shot_player_id != player.id
+            or not room.hunter_state.can_shoot()
+        ):
+            return None
+        decision = await self._request_decision(player, room, "hunter_shoot")
+        return decision.target_number if decision else None

@@ -248,12 +248,12 @@ class NightWolfPhase(BasePhase):
 
             if target_number:
                 target_player = room.get_player_by_number(target_number)
-                if (
-                    target_player
-                    and target_player.is_alive
-                    and target_player.role != Role.WEREWOLF
-                ):
+                if target_player and target_player.is_alive:
                     room.vote_state.night_votes[wolf.id] = target_player.id
+                    if wolf.ai_context:
+                        wolf.ai_context.record_private_action(
+                            "werewolf_kill", target_player.display_name
+                        )
                     room.log(
                         f"🐺 {wolf.display_name}（狼人AI）选择刀 {target_player.display_name}"
                     )
@@ -268,7 +268,8 @@ class NightWolfPhase(BasePhase):
                             and teammate.is_ai
                             and teammate.ai_context
                         ):
-                            teammate.ai_context.add_event(
+                            teammate.ai_context.current_round = room.current_round
+                            teammate.ai_context.add_private_event(
                                 f"狼队友 {wolf.display_name} 选择刀 {target_player.display_name}"
                             )
                     continue

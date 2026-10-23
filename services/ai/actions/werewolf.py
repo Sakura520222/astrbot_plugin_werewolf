@@ -1,17 +1,7 @@
-"""狼人行动 - 杀人和密谋"""
+"""Wolf-only decisions use the same rulebook and personality as public turns."""
 
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
-from ..context import ContextBuilder, SituationAnalyzer
-from ..prompts import (
-    ANTI_HALLUCINATION_PROTOCOL,
-    HUMAN_STYLE_TIPS,
-    ROLE_PROMPTS,
-    ROLE_SOUL_SETTINGS,
-)
-from ..validators import TargetValidator
 from .base import BaseAction
 
 if TYPE_CHECKING:
@@ -19,56 +9,34 @@ if TYPE_CHECKING:
 
 
 class WerewolfAction(BaseAction):
-    """狼人行动"""
+    """Choose a legal attack or send a complete private message."""
 
     async def decide_kill(self, player: "Player", room: "GameRoom") -> int | None:
-        """AI狼人选择击杀目标"""
-        context = ContextBuilder.build_context(player, room)
-        role_key = ContextBuilder.get_role_key(player)
-        soul_setting = ROLE_SOUL_SETTINGS.get(role_key, "")
-        tactical_directive = SituationAnalyzer.get_tactical_directive(player, room)
+        """Choose from living targets, including deliberate wolf attacks.
 
-        prompt = ROLE_PROMPTS["werewolf_kill"].format(
-            anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
-            soul_setting=soul_setting,
-            context=context,
-            tactical_directive=tactical_directive,
-        )
+        Args:
+            player: Living werewolf.
+            room: Active room.
 
-        response = await self._call_llm(prompt, player)
-        if response:
-            target = self.extract_number(response)
-            if target:
-                # 使用验证器确保目标有效
-                validated = TargetValidator.validate_kill_target(room, target, player)
-                if validated:
-                    return validated
-                # 如果验证失败，尝试随机选择存活目标
-                logger.warning(
-                    f"[狼人杀AI] 狼人 {player.name} 选择的目标无效，随机选择"
-                )
-                valid_targets = TargetValidator.get_valid_targets(
-                    room, exclude_player=player
-                )
-                # 排除狼队友
-                wolves = room.get_alive_werewolves()
-                wolf_numbers = [w.number for w in wolves]
-                valid_targets = [t for t in valid_targets if t not in wolf_numbers]
-                if valid_targets:
-                    import random
-
-                    return random.choice(valid_targets)
-        return None
+        Returns:
+            Legal target number, or None on failure.
+        """
+        if not player.is_werewolf or not player.is_alive:
+            return None
+        decision = await self._request_decision(player, room, "werewolf_kill")
+        return decision.target_number if decision else None
 
     async def decide_chat(self, player: "Player", room: "GameRoom") -> str | None:
-        """AI狼人生成密谋消息"""
-        context = ContextBuilder.build_context(player, room)
+        """Generate private coordination without using another role's secrets.
 
-        prompt = ROLE_PROMPTS["werewolf_chat"].format(
-            context=context, human_style=HUMAN_STYLE_TIPS
-        )
+        Args:
+            player: Living werewolf.
+            room: Active room.
 
-        response = await self._call_llm(prompt, player)
-        if response:
-            return response
-        return None
+        Returns:
+            Complete private message, or None.
+        """
+        if not player.is_werewolf or not player.is_alive:
+            return None
+        decision = await self._request_decision(player, room, "werewolf_chat")
+        return decision.speech if decision else None

@@ -2,6 +2,8 @@
 
 from typing import TYPE_CHECKING
 
+from ..models.game_rules import GameRules
+
 if TYPE_CHECKING:
     from ..models import GameRoom
 
@@ -11,34 +13,15 @@ class VictoryChecker:
 
     @staticmethod
     def check(room: "GameRoom") -> tuple[str | None, str | None]:
+        """Apply the shared authoritative victory rules.
+
+        Args:
+            room: Current room.
+
+        Returns:
+            Victory message and faction, or (None, None) while play continues.
         """
-        检查胜利条件
-
-        返回: (胜利消息, 胜利阵营) 或 (None, None) 表示游戏继续
-        胜利阵营: "werewolf" 或 "villager"
-        """
-        alive_players = room.get_alive_players()
-        alive_werewolves = [p for p in alive_players if p.is_werewolf]
-        alive_goods = [p for p in alive_players if p.is_good]
-        alive_gods = [p for p in alive_players if p.is_god]
-
-        werewolf_count = len(alive_werewolves)
-        good_count = len(alive_goods)
-
-        # 狼人全灭 -> 好人胜利
-        if werewolf_count == 0:
-            return "好人胜利！所有狼人已被放逐！", "villager"
-
-        # 好人数量 <= 狼人数量 -> 狼人胜利
-        if good_count <= werewolf_count:
-            return "狼人胜利！好人数量不足！", "werewolf"
-
-        # 神职全灭 -> 狼人胜利
-        if len(alive_gods) == 0 and werewolf_count > 0:
-            return "狼人胜利！所有神职人员已出局！", "werewolf"
-
-        # 游戏继续
-        return None, None
+        return GameRules.outcome(room)
 
     @staticmethod
     def get_all_players_roles(room: "GameRoom") -> str:

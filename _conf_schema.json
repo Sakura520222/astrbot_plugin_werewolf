@@ -145,5 +145,17 @@
         "hint": "当预言家/女巫已死时，随机等待的最大时长",
         "type": "int",
         "default": 15
+    },
+    "ai_personality_pool": {
+        "description": "AI人格候选列表",
+        "hint": "留空使用全部42种内置人格。可填人格key（见README），同局优先不重复；候选用尽才允许重复。与昵称及身份独立。",
+        "type": "list",
+        "default": []
+    },
+    "ai_personality_overrides": {
+        "description": "AI人格扩展与权重（JSON）",
+        "hint": "可覆盖内置key或新增人格，例如 {\"quiet\":{\"weight\":2},\"custom\":{\"name\":\"自定义\",\"voice\":\"简洁温和\",\"brevity\":[20,50],\"judgement\":\"核对事实\",\"risk\":\"谨慎表态\",\"emotion\":\"压力下仍冷静\",\"weight\":1}}。weight=0禁用，非法项回退。",
+        "type": "text",
+        "default": ""
     }
 }

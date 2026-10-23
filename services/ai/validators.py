@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
+from ...models.game_rules import GameRules
+
 if TYPE_CHECKING:
     from ...models import GameRoom, Player
 
@@ -20,15 +22,15 @@ class TargetValidator:
 
         Args:
             room: 游戏房间
-            target_number: 目标玩家编号 (1-9)
+            target_number: 本局实际玩家编号
             action_type: 操作类型（用于日志）
 
         Returns:
             如果目标有效返回目标编号，否则返回 None
         """
         # 基本范围检查
-        if not (1 <= target_number <= 9):
-            logger.warning(f"[AI验证] {action_type}目标 {target_number} 超出范围(1-9)")
+        if type(target_number) is not int or target_number not in room.number_to_player:
+            logger.warning(f"[Werewolf AI] Unknown {action_type} seat: {target_number}")
             return None
 
         # 获取目标玩家
@@ -86,9 +88,13 @@ class TargetValidator:
         room: "GameRoom", target_number: int, attacker: "Player"
     ) -> int | None:
         """验证击杀目标（狼人/猎人）"""
-        # 不能杀自己
-        if target_number == attacker.number:
-            logger.warning(f"[AI验证] {attacker.display_name} 尝试杀自己，拒绝")
+        # Hunters cannot shoot themselves; wolves may deliberately self-attack.
+        if target_number not in GameRules.legal_targets(
+            room, attacker, "kill" if attacker.is_werewolf else "shoot"
+        ):
+            logger.warning(
+                f"[Werewolf AI] {attacker.display_name} supplied an illegal kill/shot target: {target_number}"
+            )
             return None
 
         return TargetValidator.validate_target(room, target_number, "击杀")
@@ -115,15 +121,7 @@ class TargetValidator:
             logger.warning("[AI验证] 预言家尝试验自己，拒绝")
             return None
 
-        # 预言家可以验死人（但通常没意义）
-        if not (1 <= target_number <= 9):
-            return None
-
-        target_player = room.get_player_by_number(target_number)
-        if not target_player:
-            return None
-
-        return target_number
+        return TargetValidator.validate_target(room, target_number, "查验")
 
     @staticmethod
     def get_valid_targets(

@@ -1,10 +1,9 @@
-"""上下文构建器 - 构建AI玩家的游戏上下文"""
+"""Compose a role-scoped, layered view of real room state."""
 
-import re
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
+from ....models.ai_player import AIPlayerContext
+from ....models.game_rules import GameRules
 from ..prompts import DOUBLE_DEATH_TIPS, PEACEFUL_NIGHT_TIPS
 
 if TYPE_CHECKING:
@@ -12,181 +11,145 @@ if TYPE_CHECKING:
 
 
 class ContextBuilder:
-    """AI上下文构建器"""
+    """Refresh authoritative identity before every model call."""
+
+    @staticmethod
+    def refresh_context(player: "Player", room: "GameRoom") -> AIPlayerContext:
+        """Synchronize public state and only the actor's permitted private state.
+
+        Args:
+            player: Player receiving a prompt.
+            room: Authoritative room.
+
+        Returns:
+            The player's own context, with original records preserved.
+        """
+        if player.ai_context is None:
+            player.ai_context = AIPlayerContext()
+        ctx = player.ai_context
+        ctx.player_number = player.number
+        ctx.player_name = player.name
+        ctx.role_name = player.role.display_name if player.role else "未知"
+        ctx.is_werewolf = bool(player.role and player.role.value == "werewolf")
+        ctx.current_round = room.current_round
+        ctx.current_phase = room.phase.value
+        if room.vote_state.is_pk_vote or room.phase.value == "PK发言":
+            names = [
+                p.display_name
+                for p in room.get_alive_players()
+                if p.id in room.vote_state.pk_players
+            ]
+            ctx.current_phase += "；公开PK候选：" + "、".join(names)
+        ctx.rulebook = GameRules.describe(room.config)
+        ctx.update_alive_players(
+            [
+                p.display_name
+                for p in sorted(room.get_alive_players(), key=lambda p: p.number)
+            ],
+            [
+                p.display_name
+                for p in sorted(room.players.values(), key=lambda p: p.number)
+                if not p.is_alive
+            ],
+        )
+        if ctx.is_werewolf:
+            ctx.werewolf_teammates = [
+                p.display_name for p in room.get_werewolves() if p.id != player.id
+            ]
+        if player.role and player.role.value == "witch":
+            ctx.witch_antidote_used = room.witch_state.antidote_used
+            ctx.witch_poison_used = room.witch_state.poison_used
+            if room.phase.value == "夜晚-女巫行动":
+                killed = room.get_player(room.last_killed_id)
+                ctx.last_killed_player = killed.display_name if killed else None
+        if player.role and player.role.value == "hunter":
+            ctx.can_shoot = (
+                room.hunter_state.pending_shot_player_id == player.id
+                and room.hunter_state.can_shoot()
+            )
+        return ctx
 
     @staticmethod
     def build_context(player: "Player", room: "GameRoom") -> str:
-        """构建游戏上下文"""
-        if player.ai_context:
-            return player.ai_context.to_prompt_context()
-        return f"你是{player.number}号玩家"
+        """Render the current view, retaining all source records in memory.
 
-    @staticmethod
-    def get_role_key(player: "Player") -> str:
-        """获取角色key"""
-        if not player.role:
-            return "villager"
-        role_map = {
-            "werewolf": "werewolf",
-            "seer": "seer",
-            "witch": "witch",
-            "hunter": "hunter",
-            "villager": "villager",
-        }
-        return role_map.get(player.role.value, "villager")
+        Args:
+            player: Acting player.
+            room: Current room.
 
-    @staticmethod
-    def get_peaceful_night_tip(player: "Player", room: "GameRoom") -> str:
-        """获取平安夜特殊提示词"""
-        if not player.ai_context:
-            return ""
-
-        events = player.ai_context.game_events
-        current_round = room.current_round
-        is_peaceful_night = False
-        has_death_event = False
-        saved_player_name = None
-        killed_target_name = None
-
-        for event in events:
-            if f"第{current_round}夜：平安夜" in event:
-                is_peaceful_night = True
-            if f"第{current_round}夜死亡" in event:
-                has_death_event = True
-            if "救了" in event or "使用解药" in event:
-                match = re.search(r"救了\s*(\S+)", event)
-                if match:
-                    saved_player_name = match.group(1)
-
-        # 防御性检查
-        if is_peaceful_night and has_death_event:
-            logger.error(f"[BUG检测] 第{current_round}夜同时存在平安夜和死亡事件！")
-            return ""
-
-        if has_death_event or not is_peaceful_night:
-            return ""
-
-        role_key = ContextBuilder.get_role_key(player)
-
-        if role_key == "witch":
-            if player.ai_context.last_killed_player:
-                saved_player_name = player.ai_context.last_killed_player
-            if saved_player_name:
-                return PEACEFUL_NIGHT_TIPS["witch"].format(
-                    saved_player=saved_player_name
-                )
-            return ""
-
-        if role_key == "werewolf":
-            for event in events:
-                if "选择刀" in event or "击杀" in event:
-                    match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)", event)
-                    if match:
-                        killed_target_name = match.group(1) or match.group(2)
-            if killed_target_name:
-                return PEACEFUL_NIGHT_TIPS["werewolf"].format(
-                    killed_target=killed_target_name
-                )
-            return PEACEFUL_NIGHT_TIPS["werewolf"].format(
-                killed_target="某人（你们昨晚的目标）"
-            )
-
-        return PEACEFUL_NIGHT_TIPS["good"]
-
-    @staticmethod
-    def get_double_death_tip(player: "Player", room: "GameRoom") -> str:
-        """获取双死特殊提示词"""
-        if not player.ai_context:
-            return ""
-
-        events = player.ai_context.game_events
-        dead_players = []
-        wolf_killed_name = None
-        witch_poisoned_name = None
-        current_round = room.current_round
-
-        for event in events:
-            if "死亡" in event and f"第{current_round}夜" in event:
-                death_match = re.search(r"死亡[：:]\s*(.+)", event)
-                if death_match:
-                    dead_str = death_match.group(1)
-                    names = [n.strip() for n in dead_str.split(",") if n.strip()]
-                    for name in names:
-                        if name and name not in dead_players:
-                            dead_players.append(name)
-
-            if "选择刀" in event or "击杀" in event or "狼人杀" in event:
-                match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)|杀.*?(\d+号)", event)
-                if match:
-                    wolf_killed_name = (
-                        match.group(1) or match.group(2) or match.group(3)
-                    )
-
-            if "毒" in event and (
-                "使用" in event or "毒了" in event or "毒死" in event
-            ):
-                match = re.search(r"毒.*?(\d+号\S*|\S+)", event)
-                if match:
-                    witch_poisoned_name = match.group(1)
-
-        if len(dead_players) < 2:
-            return ""
-
-        dead_player_a = dead_players[-2] if len(dead_players) >= 2 else dead_players[0]
-        dead_player_b = dead_players[-1]
-
-        role_key = ContextBuilder.get_role_key(player)
-
-        if role_key == "witch":
-            if witch_poisoned_name:
-                other_dead = (
-                    dead_player_b
-                    if witch_poisoned_name in dead_player_a
-                    else dead_player_a
-                )
-                return DOUBLE_DEATH_TIPS["witch"].format(
-                    dead_player_a=dead_player_a,
-                    dead_player_b=dead_player_b,
-                    poisoned_player=witch_poisoned_name,
-                    other_dead=other_dead,
-                )
-            return ""
-
-        if role_key == "werewolf":
-            if wolf_killed_name:
-                witch_poisoned = (
-                    dead_player_b
-                    if wolf_killed_name in dead_player_a
-                    else dead_player_a
-                )
-                return DOUBLE_DEATH_TIPS["werewolf"].format(
-                    dead_player_a=dead_player_a,
-                    dead_player_b=dead_player_b,
-                    wolf_killed=wolf_killed_name,
-                    witch_poisoned=witch_poisoned,
-                )
-            return DOUBLE_DEATH_TIPS["werewolf"].format(
-                dead_player_a=dead_player_a,
-                dead_player_b=dead_player_b,
-                wolf_killed="你们刀的那个",
-                witch_poisoned="另一个死者",
-            )
-
-        return DOUBLE_DEATH_TIPS["good"].format(
-            dead_player_a=dead_player_a, dead_player_b=dead_player_b
+        Returns:
+            Rules, identity, personality, public evidence, private facts and beliefs.
+        """
+        return ContextBuilder.refresh_context(player, room).to_prompt_context(
+            layered=True
         )
 
     @staticmethod
+    def get_role_key(player: "Player") -> str:
+        """Return the authoritative role key.
+
+        Args:
+            player: Acting player.
+
+        Returns:
+            Role identifier, defaulting to villager before assignment.
+        """
+        return player.role.value if player.role else "villager"
+
+    @staticmethod
+    def get_peaceful_night_tip(player: "Player", room: "GameRoom") -> str:
+        """Describe a publicly announced peaceful night without inventing rescue.
+
+        Args:
+            player: Player with an individual event history.
+            room: Current room.
+
+        Returns:
+            Optional guidance scoped to the player's role.
+        """
+        if (
+            not player.ai_context
+            or f"第{room.current_round}夜：平安夜" not in player.ai_context.game_events
+        ):
+            return ""
+        role = ContextBuilder.get_role_key(player)
+        return PEACEFUL_NIGHT_TIPS.get(role, PEACEFUL_NIGHT_TIPS["good"])
+
+    @staticmethod
+    def get_double_death_tip(player: "Player", room: "GameRoom") -> str:
+        """Use the announcement alone to identify a multiple-death scenario.
+
+        Args:
+            player: Player with the public announcement.
+            room: Current room.
+
+        Returns:
+            Optional guidance without querying secret death causes.
+        """
+        if not player.ai_context:
+            return ""
+        prefix = f"第{room.current_round}夜死亡："
+        multiple = any(
+            event.startswith(prefix)
+            and len(event.removeprefix(prefix).split(", ")) >= 2
+            for event in player.ai_context.game_events
+        )
+        if not multiple:
+            return ""
+        role = ContextBuilder.get_role_key(player)
+        return DOUBLE_DEATH_TIPS.get(role, DOUBLE_DEATH_TIPS["good"])
+
+    @staticmethod
     def get_special_event_tip(player: "Player", room: "GameRoom") -> str:
-        """获取特殊事件提示词（平安夜或双死）"""
-        # 先检查双死
-        double_death_tip = ContextBuilder.get_double_death_tip(player, room)
-        if double_death_tip:
-            return double_death_tip
+        """Return event guidance derived only from observed announcements.
 
-        # 再检查平安夜
-        peaceful_tip = ContextBuilder.get_peaceful_night_tip(player, room)
-        if peaceful_tip:
-            return peaceful_tip
+        Args:
+            player: Acting player.
+            room: Current room.
 
-        return ""
+        Returns:
+            Multiple-death or peaceful-night guidance, if applicable.
+        """
+        return ContextBuilder.get_double_death_tip(
+            player, room
+        ) or ContextBuilder.get_peaceful_night_tip(player, room)

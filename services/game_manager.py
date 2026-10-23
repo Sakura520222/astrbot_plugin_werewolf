@@ -134,7 +134,7 @@ class GameManager:
         ai_player_id = f"ai_{uuid4().hex}"
 
         # Assign personality independently of the public display name.
-        personality_name = self.ai_player_service.assign_personality(ai_player_id)
+        personality_name = self.ai_player_service.assign_personality(ai_player_id, room)
 
         # Keep AI and human display names in the same format.
         player = Player(
@@ -347,6 +347,11 @@ class GameManager:
             killed_player = room.get_player(killed_id)
             if killed_player:
                 room.log(f"🌙 狼人最终决定刀 {killed_player.display_name}")
+                for wolf in room.get_alive_werewolves():
+                    if wolf.is_ai and wolf.ai_context:
+                        wolf.ai_context.record_private_action(
+                            "wolf_final_target", killed_player.display_name
+                        )
 
             return killed_id
         except Exception as e:
