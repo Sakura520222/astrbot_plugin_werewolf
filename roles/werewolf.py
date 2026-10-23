@@ -57,9 +57,11 @@ class WerewolfRole(BaseRole):
             f"📋 可选目标列表：\n{players_list}\n\n"
             f"💡 夜晚私聊使用命令：\n"
             f"  {cmd('办掉')} 编号 - 投票办掉目标\n"
+            f"  {cmd('弃票')} - 本次不提交刀人目标\n"
             f"  {cmd('密谋')} 消息 - 与队友交流\n"
+            "只统计有效刀票；全部弃票则当夜空刀。\n"
             f"示例：{cmd('办掉')} 1"
         )
 
     def get_night_commands(self) -> list[str]:
-        return [f"{cmd('办掉')} 编号", f"{cmd('密谋')} 消息"]
+        return [f"{cmd('办掉')} 编号", cmd("弃票"), f"{cmd('密谋')} 消息"]

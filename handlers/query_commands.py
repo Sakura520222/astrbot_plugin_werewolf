@@ -137,6 +137,7 @@ class QueryCommandHandler(BaseCommandHandler):
                 f"  {cmd('发言完毕')} - 发言说完\n"
                 f"  {cmd('遗言完毕')} - 遗言说完\n"
                 f"  {cmd('投票')} 编号 - 白天投票放逐（如：{cmd('投票')} 2）\n"
+                f"  {cmd('弃票')} - 群聊白天/PK弃票，私聊狼人不选刀\n"
                 f"  {cmd('开始投票')} - 跳过发言直接投票（房主）\n\n"
                 "游戏规则：\n"
                 f"• {config.total_players}人局：{config.werewolf_count}狼人 + {config.god_count}神 + {config.villager_count}平民\n"
@@ -146,5 +147,6 @@ class QueryCommandHandler(BaseCommandHandler):
                 f"• 游戏结束后{'生成AI复盘报告' if config.enable_ai_review else '不生成AI复盘'}\n"
                 "• 狼人胜利：好人 ≤ 狼人 或 神职全灭\n"
                 "• 好人胜利：狼人全部出局"
+                "\n• 弃票算完成投票但不计入目标票数；无有效票无人出局，狼人无有效刀票则空刀"
             )
             yield event.plain_result(help_text)

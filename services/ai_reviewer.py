@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
+from .ai.actions.base import BaseAction
+
 if TYPE_CHECKING:
     from ..models import GameRoom
 
@@ -41,7 +43,7 @@ class AIReviewer:
             # 调用AI
             response = await asyncio.wait_for(
                 provider.text_chat(prompt=user_prompt, system_prompt=system_prompt),
-                timeout=60,
+                timeout=BaseAction.LLM_TIMEOUT_SECONDS,
             )
 
             if response.result_chain:

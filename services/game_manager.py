@@ -322,13 +322,27 @@ class GameManager:
         try:
             votes = room.vote_state.night_votes
 
-            if not votes:
-                return None
-
-            # 统计票数
             vote_counts: dict[str, int] = {}
-            for target_id in votes.values():
+            for voter_id, target_id in votes.items():
+                voter = room.get_player(voter_id)
+                if (
+                    not voter
+                    or not voter.is_alive
+                    or voter.role != Role.WEREWOLF
+                    or target_id == "ABSTAIN"
+                    or not room.is_player_alive(target_id)
+                ):
+                    continue
                 vote_counts[target_id] = vote_counts.get(target_id, 0) + 1
+
+            if not vote_counts:
+                room.vote_state.clear_night_votes()
+                room.last_killed_id = None
+                room.log("🌙 狼人未提交有效刀票，今晚空刀")
+                for wolf in room.get_alive_werewolves():
+                    if wolf.is_ai and wolf.ai_context:
+                        wolf.ai_context.record_private_action("wolf_final_target", None)
+                return None
 
             # 获取票数最多的目标
             max_votes = max(vote_counts.values())

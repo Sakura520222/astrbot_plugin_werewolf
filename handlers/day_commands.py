@@ -142,8 +142,18 @@ class DayCommandHandler(BaseCommandHandler):
         else:
             await phase_manager.enter_vote_phase(room)
 
-    async def day_vote(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """投票放逐"""
+    async def day_vote(
+        self, event: AstrMessageEvent, *, abstain: bool = False
+    ) -> AsyncGenerator:
+        """Submit a daytime or PK ballot, including an explicit abstention.
+
+        Args:
+            event: Group command from the voter.
+            abstain: Whether to submit an abstention instead of a target.
+
+        Yields:
+            The command result.
+        """
         group_id = event.get_group_id()
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令！")
@@ -170,32 +180,30 @@ class DayCommandHandler(BaseCommandHandler):
             yield event.plain_result("❌ 你已经出局了！")
             return
 
-        # 获取目标
-        target_str = self.get_target_user(event)
-        if not target_str:
-            yield event.plain_result(
-                f"❌ 请指定投票目标！\n使用：{cmd('投票')} 编号\n示例：{cmd('投票')} 2"
-            )
-            return
-
-        target_id = room.parse_target(target_str)
-        if not target_id:
-            yield event.plain_result(
-                f"❌ 无效的目标：{target_str}\n请使用本局玩家编号（1-{room.config.total_players}）"
-            )
-            return
-
-        if not room.is_player_alive(target_id):
-            yield event.plain_result("❌ 目标玩家已经出局！")
-            return
-
-        if target_id == player_id:
-            yield event.plain_result("❌ 不能投票给自己！")
-            return
-
-        # PK投票限制
-        if room.vote_state.is_pk_vote:
-            if target_id not in room.vote_state.pk_players:
+        target_str = "弃票" if abstain else self.get_target_user(event)
+        abstain = target_str == "弃票"
+        target_id = "ABSTAIN" if abstain else room.parse_target(target_str or "")
+        if not abstain:
+            if not target_str:
+                yield event.plain_result(
+                    f"❌ 请指定投票目标！\n使用：{cmd('投票')} 编号，或 {cmd('弃票')}"
+                )
+                return
+            if not target_id:
+                yield event.plain_result(
+                    f"❌ 无效的目标：{target_str}\n请使用本局玩家编号（1-{room.config.total_players}）"
+                )
+                return
+            if not room.is_player_alive(target_id):
+                yield event.plain_result("❌ 目标玩家已经出局！")
+                return
+            if target_id == player_id:
+                yield event.plain_result("❌ 不能投票给自己！")
+                return
+            if (
+                room.vote_state.is_pk_vote
+                and target_id not in room.vote_state.pk_players
+            ):
                 pk_names = []
                 for pid in room.vote_state.pk_players:
                     p = room.get_player(pid)
@@ -209,28 +217,26 @@ class DayCommandHandler(BaseCommandHandler):
 
         # Capture ownership before yielding the command reply.
         generation = room.vote_state.generation
+        changed = room.vote_state.day_votes.get(player_id) != target_id
         room.vote_state.day_votes[player_id] = target_id
-
-        # 记录日志
         voter = room.get_player(player_id)
         target = room.get_player(target_id)
+        target_name = target.display_name if target else "弃票"
         is_pk = room.vote_state.is_pk_vote
-        if is_pk:
-            room.log(f"🗳️ PK投票：{voter.display_name} 投给 {target.display_name}")
-        else:
-            room.log(f"🗳️ {voter.display_name} 投票给 {target.display_name}")
-
-        # 同步投票到所有AI玩家上下文
-        for p in room.players.values():
-            if p.is_ai and p.ai_context:
-                p.ai_context.current_round = room.current_round
-                p.ai_context.add_vote(voter.display_name, target.display_name, is_pk)
-                p.ai_context.analyze_voting_pattern(
-                    voter.display_name, target.display_name, is_pk
-                )
+        if changed:
+            ballot = "弃票" if abstain else f"投给 {target_name}"
+            room.log(f"🗳️ {'PK投票：' if is_pk else ''}{voter.display_name} {ballot}")
+            for p in room.players.values():
+                if p.is_ai and p.ai_context:
+                    p.ai_context.current_round = room.current_round
+                    p.ai_context.add_vote(voter.display_name, target_name, is_pk)
+                    p.ai_context.analyze_voting_pattern(
+                        voter.display_name, target_name, is_pk
+                    )
 
         yield event.plain_result(
-            f"✅ 投票成功！当前已投票 {len(room.vote_state.day_votes)}/{room.alive_count} 人"
+            f"✅ {'弃票' if abstain else '投票'}成功！当前已投票（含弃票）"
+            f"{len(room.vote_state.day_votes)}/{room.alive_count} 人"
         )
 
         # 检查是否所有人都投票了

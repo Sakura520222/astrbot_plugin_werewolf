@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 class BaseAction:
     """AI行动基类"""
 
-    LLM_TIMEOUT_SECONDS = 30
+    LLM_TIMEOUT_SECONDS = 180
+    MAX_DECISION_ATTEMPTS = 3
 
     def __init__(self, context, personality_cache: dict[str, str] | None = None):
         self.context = context
@@ -236,7 +237,13 @@ class BaseAction:
             room.last_words_generation,
         )
         max_attempts = min(
-            max(player.ai_config.max_retries if player.ai_config else 3, 1), 3
+            max(
+                player.ai_config.max_retries
+                if player.ai_config
+                else self.MAX_DECISION_ATTEMPTS,
+                1,
+            ),
+            self.MAX_DECISION_ATTEMPTS,
         )
         for attempt in range(1, max_attempts + 1):
             response = await self._call_llm(prompt, player, max_retries=1)

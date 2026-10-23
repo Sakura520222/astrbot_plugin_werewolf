@@ -83,6 +83,7 @@ class GameRoom:
     wolf_ai_chatted: bool = False  # AI狼人是否已密谋（防止重复）
     wolf_ai_vote_task: asyncio.Task | None = None  # AI投票定时器任务
     wolf_ai_process_task: asyncio.Task | None = None  # 全AI狼人处理任务
+    wolf_ai_ballot_task: asyncio.Task | None = field(default=None, repr=False)
 
     # 白天投票状态
     day_ai_voted: bool = False  # AI白天是否已投票
@@ -116,6 +117,8 @@ class GameRoom:
 
     # 游戏日志
     game_log: list[str] = field(default_factory=list)
+    used_fallback_speeches: set[str] = field(default_factory=set, repr=False)
+    last_fallback_speech: str = ""
 
     # 并发控制
     _lock: Lock = field(default_factory=Lock, init=False)  # 用于保护共享状态的锁
@@ -291,6 +294,7 @@ class GameRoom:
             "timer_task",
             "wolf_ai_vote_task",
             "wolf_ai_process_task",
+            "wolf_ai_ballot_task",
             "day_ai_task",
         ):
             task = getattr(self, attribute)

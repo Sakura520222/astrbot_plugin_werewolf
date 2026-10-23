@@ -14,6 +14,9 @@ class BanService:
     @staticmethod
     async def ban_player(room: "GameRoom", player_id: str) -> bool:
         """禁言玩家"""
+        player = room.get_player(player_id)
+        if player and player.is_ai:
+            return True
         if not room.bot:
             return False
 
@@ -32,6 +35,10 @@ class BanService:
     @staticmethod
     async def unban_player(room: "GameRoom", player_id: str) -> bool:
         """解除禁言"""
+        player = room.get_player(player_id)
+        if player and player.is_ai:
+            room.banned_player_ids.discard(player_id)
+            return True
         if not room.bot:
             return False
 
@@ -86,6 +93,9 @@ class BanService:
     @staticmethod
     async def set_temp_admin(room: "GameRoom", player_id: str) -> bool:
         """设置临时管理员（用于发言）"""
+        player = room.get_player(player_id)
+        if player and player.is_ai:
+            return True
         if not room.bot:
             return False
 
@@ -103,6 +113,10 @@ class BanService:
     @staticmethod
     async def remove_temp_admin(room: "GameRoom", player_id: str) -> bool:
         """取消临时管理员"""
+        player = room.get_player(player_id)
+        if player and player.is_ai:
+            room.temp_admin_ids.discard(player_id)
+            return True
         if not room.bot:
             return False
 
@@ -127,6 +141,9 @@ class BanService:
     @staticmethod
     async def set_group_card(room: "GameRoom", player_id: str, card: str) -> bool:
         """设置群昵称"""
+        player = room.get_player(player_id)
+        if player and player.is_ai:
+            return True
         if not room.bot:
             return False
 

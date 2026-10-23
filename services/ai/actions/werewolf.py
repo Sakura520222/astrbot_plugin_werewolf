@@ -19,7 +19,7 @@ class WerewolfAction(BaseAction):
             room: Active room.
 
         Returns:
-            Legal target number, or None on failure.
+            Legal target number, or None for explicit abstention or failed generation.
         """
         if not player.is_werewolf or not player.is_alive:
             return None

@@ -379,10 +379,10 @@ class DayVotePhase(BasePhase):
         counts = {}
         voters = {}
         for voter, target in votes.items():
+            voters.setdefault(target, []).append(voter)
             if target == "ABSTAIN":
                 continue
             counts[target] = counts.get(target, 0) + 1
-            voters.setdefault(target, []).append(voter)
         highest = max(counts.values(), default=0)
         leaders = (
             [p.id for p in room.get_alive_players() if counts.get(p.id) == highest]

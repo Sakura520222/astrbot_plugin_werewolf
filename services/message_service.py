@@ -103,7 +103,7 @@ class MessageService:
             "角色已分配完毕！\n\n"
             "机器人正在私聊告知各位身份...\n"
             f"如未收到私聊，请使用：{cmd('查角色')}\n\n"
-            f"🐺 狼人请私聊使用：{cmd('办掉')} 编号\n"
+            f"🐺 狼人请私聊使用：{cmd('办掉')} 编号，或 {cmd('弃票')}\n"
             f"🔮 预言家请等待狼人行动完成后使用：{cmd('验人')} 编号\n"
             "⏰ 剩余时间：2分钟"
         )
@@ -113,7 +113,7 @@ class MessageService:
         """公告夜晚开始"""
         text = (
             "🌙 夜晚降临，天黑请闭眼...\n\n"
-            f"🐺 狼人请私聊使用：{cmd('办掉')} 编号\n"
+            f"🐺 狼人请私聊使用：{cmd('办掉')} 编号，或 {cmd('弃票')}\n"
             "🔮 预言家请等待狼人行动完成\n"
             "⏰ 剩余时间：2分钟"
         )
@@ -174,7 +174,8 @@ class MessageService:
         text = (
             "📊 发言环节结束！现在进入投票阶段！\n\n"
             "请所有存活玩家使用命令：\n"
-            f"{cmd('投票')} 编号\n\n"
+            f"{cmd('投票')} 编号，或 {cmd('弃票')}\n"
+            "弃票计为已投票，不计入任何人的票数；全员弃票则无人出局。\n\n"
             f"当前存活人数：{room.alive_count}\n"
             "⏰ 剩余时间：2分钟"
         )
@@ -197,7 +198,8 @@ class MessageService:
             "⚠️ 只能投给以下平票玩家：\n"
             + "\n".join([f"  • {name}" for name in pk_names])
             + "\n\n⏰ 投票时间：2分钟\n"
-            + f"💡 使用 {cmd('投票')} 编号"
+            + f"💡 使用 {cmd('投票')} 编号，或 {cmd('弃票')}\n"
+            + "弃票计为已投票；全员弃票或再次平票则无人出局。"
         )
         return await self.send_group_message(room, text)
 
@@ -225,7 +227,7 @@ class MessageService:
         Args:
             room: Room supplying the public player names.
             vote_counts: Counts keyed by target player ID.
-            voters_map: Voter IDs grouped by target player ID.
+            voters_map: Voter IDs grouped by target ID, including ABSTAIN ballots.
             exiled_name: Display name of the exiled player, never a model object.
             is_pk: Whether this result belongs to a PK vote.
 
@@ -257,10 +259,29 @@ class MessageService:
                     f"• {target.display_name}: {vote_count}票 (投票者: {voters_str})\n"
                 )
 
+        abstainers = set(voters_map.get("ABSTAIN", []))
+        submitted = {voter for voter_ids in voters_map.values() for voter in voter_ids}
+        abstainer_names = [
+            p.display_name for p in room.get_alive_players() if p.id in abstainers
+        ]
+        missing_names = [
+            p.display_name for p in room.get_alive_players() if p.id not in submitted
+        ]
+        if abstainer_names:
+            text += (
+                f"\n• 弃票（{len(abstainer_names)}人）：{'、'.join(abstainer_names)}\n"
+            )
+        if missing_names:
+            text += f"• 未投票（{len(missing_names)}人）：{'、'.join(missing_names)}\n"
+
         if exiled_name:
             text += f"\n🔨 {exiled_name} 被放逐了！"
+        elif not vote_counts:
+            text += "\n⚖️ 本轮无有效票，无人被放逐"
+        elif not is_pk:
+            text += "\n⚖️ 最高票平票，进入PK发言与投票"
         else:
-            text += "\n⚖️ 平票，无人被放逐"
+            text += "\n⚖️ PK再次平票，无人被放逐"
 
         return await self.send_group_message(room, text)
 
@@ -296,7 +317,7 @@ class MessageService:
         """公告投票提醒"""
         text = (
             f"⏰ 投票倒计时：还有30秒！\n\n"
-            f"当前投票进度：{voted}/{total}\n"
-            f"💡 请尚未投票的玩家抓紧时间：{cmd('投票')} 编号"
+            f"当前投票进度（含弃票）：{voted}/{total}\n"
+            f"💡 请尚未投票的玩家抓紧时间：{cmd('投票')} 编号，或 {cmd('弃票')}"
         )
         return await self.send_group_message(room, text)

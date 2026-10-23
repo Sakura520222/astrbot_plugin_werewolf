@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from ..context import ContextBuilder
 from ..prompts import VOTE_TIPS
 from .base import BaseAction
+from .speech import SpeechAction
 
 if TYPE_CHECKING:
     from ....models import GameRoom, Player
@@ -41,7 +42,7 @@ class VoteAction(BaseAction):
             candidates=(pk_candidates or []) if is_pk else None,
         )
         if decision is None:
-            return ("本轮决策未能完成，暂不提交目标。", None)
+            return (SpeechAction.fallback_speech(player, room, "day_vote"), None)
         speech = decision.speech
         if not speech:
             speech = (
