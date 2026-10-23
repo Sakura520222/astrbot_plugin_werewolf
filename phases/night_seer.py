@@ -25,12 +25,21 @@ class NightSeerPhase(BasePhase):
     def timeout_seconds(self) -> int:
         return self.game_manager.config.timeout_seer
 
-    def _is_current_phase(self, room: "GameRoom") -> bool:
-        return room.phase == GamePhase.NIGHT_SEER
+    def _is_current_phase(
+        self, room: "GameRoom", round_number: int | None = None
+    ) -> bool:
+        """Validate the original room, night phase, and optional round."""
+        return (
+            self.game_manager.rooms.get(room.group_id) is room
+            and room.phase == GamePhase.NIGHT_SEER
+            and (round_number is None or room.current_round == round_number)
+        )
 
     async def on_enter(self, room: "GameRoom") -> None:
         """进入预言家验人阶段"""
+        room.cancel_timer()
         room.phase = GamePhase.NIGHT_SEER
+        round_number = room.current_round
         room.seer_checked = False
 
         seer = room.get_seer()
@@ -43,6 +52,8 @@ class NightSeerPhase(BasePhase):
 
         # 发送群提示
         await self.message_service.announce_seer_phase(room)
+        if not self._is_current_phase(room, round_number):
+            return
 
         # 如果预言家是AI，自动处理
         if seer.is_alive and seer.is_ai:
@@ -51,6 +62,8 @@ class NightSeerPhase(BasePhase):
 
         # 给预言家发私聊通知
         await self._notify_seer(room)
+        if not self._is_current_phase(room, round_number):
+            return
 
         # 计算等待时间（预言家已死则随机短时间）
         if seer.is_alive:
@@ -67,15 +80,20 @@ class NightSeerPhase(BasePhase):
     async def _handle_ai_seer(self, room: "GameRoom", seer) -> None:
         """处理AI预言家的行动"""
         ai_service = self.game_manager.ai_player_service
+        round_number = room.current_round
 
         # 更新AI上下文
         ai_service.update_ai_context(seer, room)
 
         # 延迟模拟思考
         await asyncio.sleep(random.uniform(3, 6))
+        if not self._is_current_phase(room, round_number) or room.seer_checked:
+            return
 
         # AI决策验人目标
         target_number = await ai_service.decide_seer_check(seer, room)
+        if not self._is_current_phase(room, round_number) or room.seer_checked:
+            return
         if target_number:
             target_player = room.get_player_by_number(target_number)
             if target_player and target_player.id != seer.id:
@@ -124,22 +142,28 @@ class NightSeerPhase(BasePhase):
             f"例如：{cmd('验人')} 3"
         )
 
+        if not self._is_current_phase(room):
+            return
         await self.message_service.send_private_message(room, seer.id, prompt)
         logger.info(f"[狼人杀] 已通知预言家 {seer.id} 验人")
 
     async def on_timeout(self, room: "GameRoom") -> None:
-        """预言家验人超时"""
+        """Claim a seer timeout before publishing or advancing the phase."""
+        if not self._is_current_phase(room) or room.seer_checked:
+            return
+        round_number = room.current_round
         room.seer_checked = True
-
-        # 只有预言家存活时才发送超时提示
+        room.cancel_timer()
         if room.is_seer_alive():
             await self.message_service.announce_timeout(room, "预言家验人")
-
-        # 进入女巫阶段
+            if not self._is_current_phase(room, round_number):
+                return
         await self._enter_witch_phase(room)
 
     async def on_checked(self, room: "GameRoom") -> None:
-        """预言家验人完成"""
+        """Advance only if the originating seer phase is still active."""
+        if not self._is_current_phase(room):
+            return
         room.cancel_timer()
         room.seer_checked = True
         await self._enter_witch_phase(room)

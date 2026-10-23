@@ -36,8 +36,8 @@ class AIPlayerService:
         self._seer_action = SeerAction(context)
         self._witch_action = WitchAction(context)
         self._hunter_action = HunterAction(context)
-        self._speech_action = SpeechAction(context)
-        self._vote_action = VoteAction(context)
+        self._speech_action = SpeechAction(context, self._player_personalities)
+        self._vote_action = VoteAction(context, self._player_personalities)
 
     # ==================== 性格管理 ====================
 
@@ -107,7 +107,7 @@ class AIPlayerService:
         player: "Player",
         room: "GameRoom",
         is_pk: bool = False,
-        pk_candidates: list[str] = None,
+        pk_candidates: list[int] | None = None,
     ) -> tuple[str, int | None]:
         """AI生成投票决策"""
         return await self._vote_action.decide_vote(player, room, is_pk, pk_candidates)
@@ -135,6 +135,10 @@ class AIPlayerService:
         ctx.is_werewolf = player.role and player.role.value == "werewolf"
         ctx.current_round = room.current_round
         ctx.current_phase = self._get_phase_description(room)
+
+        # Keep initialization and all later action prompts on the shared personality.
+        self.assign_personality(player.id)
+        ctx.personality = PERSONALITY_TEMPLATES[self._player_personalities[player.id]]
 
         # 添加自我认知笔记
         ctx.add_personal_note(f"我是{ctx.player_number}号玩家，身份是{ctx.role_name}。")
@@ -203,9 +207,7 @@ class AIPlayerService:
                     e for e in ctx.game_events if f"第{old_round}" in e
                 ]
                 if previous_round_events:
-                    summary = (
-                        f"第{old_round}轮总结：{'; '.join(previous_round_events[-3:])}"
-                    )
+                    summary = f"第{old_round}轮总结：{'; '.join(previous_round_events)}"
                     ctx.add_round_summary(summary)
 
         # 检查阶段变化，添加阶段记忆
@@ -261,9 +263,12 @@ class AIPlayerService:
         phase = room.phase
         round_num = room.current_round
 
-        # 首日发言阶段特殊描述
+        # 首日发言阶段特殊描述（首夜已有夜间行动，只是还没有公开信息）
         if round_num == 1 and phase == GamePhase.DAY_SPEAKING:
-            return "第1天白天（首日发言）- 昨晚只分配了身份，今天是第一次发言，没有任何前置信息"
+            return (
+                "第1天白天（首日发言）- 昨夜已完成夜间行动"
+                "（各角色掌握各自的夜间信息），今天是第一次公开发言"
+            )
 
         phase_map = {
             GamePhase.NIGHT_WOLF: f"第{round_num}天夜晚 - 狼人行动阶段",

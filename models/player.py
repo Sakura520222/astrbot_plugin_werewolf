@@ -13,7 +13,7 @@ from .enums import Role
 class Player:
     """玩家"""
 
-    id: str  # 玩家ID（QQ号，AI玩家使用 ai_{name} 格式）
+    id: str  # Human platform ID or an opaque AI identity.
     name: str  # 玩家昵称
     number: int = 0  # 玩家编号（1-9）
     role: Role | None = None  # 角色
@@ -24,6 +24,10 @@ class Player:
     is_ai: bool = False  # 是否是AI玩家
     ai_config: Optional["AIPlayerConfig"] = None  # AI玩家配置
     ai_context: Optional["AIPlayerContext"] = None  # AI玩家游戏上下文
+
+    def __repr__(self) -> str:
+        """Represent a player without exposing their identity, role or context."""
+        return self.display_name
 
     @property
     def display_name(self) -> str:

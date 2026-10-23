@@ -1,8 +1,36 @@
 """游戏配置"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .enums import Role
+
+# Default natural names for randomly selected AI fill-ins.
+DEFAULT_AI_NICKNAMES = [
+    "小咪",
+    "阿哲",
+    "柚子",
+    "汤圆",
+    "老徐",
+    "桃桃",
+    "大熊",
+    "年糕",
+    "小鹿",
+    "阿灿",
+    "布丁",
+    "栗子",
+    "阿澈",
+    "眠眠",
+    "老白",
+    "七七",
+    "夏至",
+    "青禾",
+    "阿满",
+    "小满",
+    "知言",
+    "望舒",
+    "承宇",
+    "若曦",
+]
 
 
 @dataclass
@@ -32,6 +60,7 @@ class GameConfig:
 
     # AI玩家配置
     ai_player_model: str = ""
+    ai_nicknames: list[str] = field(default_factory=lambda: list(DEFAULT_AI_NICKNAMES))
 
     # AI复盘配置
     enable_ai_review: bool = True
@@ -83,7 +112,15 @@ class GameConfig:
 
     @classmethod
     def from_dict(cls, config: dict) -> "GameConfig":
-        """从字典创建配置"""
+        """Build game configuration from plugin settings.
+
+        Args:
+            config: Settings supplied by AstrBot.
+
+        Returns:
+            Game configuration with an independent nickname pool.
+        """
+        nicknames = config.get("ai_nicknames", DEFAULT_AI_NICKNAMES)
         return cls(
             total_players=config.get("total_players", 9),
             werewolf_count=config.get("werewolf_count", 3),
@@ -101,6 +138,9 @@ class GameConfig:
             timeout_dead_max=config.get("timeout_dead_max", 15),
             ban_duration_days=config.get("ban_duration_days", 30),
             ai_player_model=config.get("ai_player_model", ""),
+            ai_nicknames=list(
+                nicknames if isinstance(nicknames, list) else DEFAULT_AI_NICKNAMES
+            ),
             enable_ai_review=config.get("enable_ai_review", True),
             ai_review_model=config.get("ai_review_model", ""),
             ai_review_prompt=config.get("ai_review_prompt", ""),

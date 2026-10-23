@@ -48,7 +48,7 @@ class ContextBuilder:
         saved_player_name = None
         killed_target_name = None
 
-        for event in events[-10:]:
+        for event in events:
             if f"第{current_round}夜：平安夜" in event:
                 is_peaceful_night = True
             if f"第{current_round}夜死亡" in event:
@@ -78,7 +78,7 @@ class ContextBuilder:
             return ""
 
         if role_key == "werewolf":
-            for event in events[-10:]:
+            for event in events:
                 if "选择刀" in event or "击杀" in event:
                     match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)", event)
                     if match:
@@ -105,7 +105,7 @@ class ContextBuilder:
         witch_poisoned_name = None
         current_round = room.current_round
 
-        for event in events[-10:]:
+        for event in events:
             if "死亡" in event and f"第{current_round}夜" in event:
                 death_match = re.search(r"死亡[：:]\s*(.+)", event)
                 if death_match:

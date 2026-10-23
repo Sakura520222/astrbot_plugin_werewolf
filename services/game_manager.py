@@ -2,6 +2,7 @@
 
 import random
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from astrbot.api import logger
 
@@ -61,12 +62,22 @@ class GameManager:
         return group_id in self.rooms
 
     async def cleanup_room(self, group_id: str) -> None:
-        """清理房间"""
+        """Stop room activity and release its resources.
+
+        Args:
+            group_id: Group ID of the room to clean up.
+        """
         if group_id not in self.rooms:
             return
 
         room = self.rooms[group_id]
-        logger.info(f"[狼人杀] 开始清理房间 {group_id}，当前房间阶段: {room.phase}")
+        logger.info(f"[Werewolf] Cleaning up room {group_id}, phase: {room.phase}")
+        # Stop phase callbacks before any asynchronous cleanup can yield control.
+        room.phase = GamePhase.FINISHED
+        room.cancel_timer()
+        for player in room.players.values():
+            if player.is_ai:
+                self.ai_player_service.clear_player_data(player.id)
 
         # 先解除全员禁言（最重要！放在最前面确保执行）
         try:
@@ -93,11 +104,9 @@ class GameManager:
         except Exception as e:
             logger.error(f"[狼人杀] 恢复群昵称失败: {e}")
 
-        # 取消定时器
-        room.cancel_timer()
-
-        # 删除房间
-        del self.rooms[group_id]
+        # Another cleanup may already have removed the same room.
+        if self.rooms.get(group_id) is room:
+            del self.rooms[group_id]
 
         logger.info(f"[狼人杀] 群 {group_id} 房间已清理")
 
@@ -109,31 +118,35 @@ class GameManager:
         room.add_player(player)
         return player
 
-    # AI玩家emoji列表（按加入顺序分配）
-    AI_EMOJIS = ["🤖", "🦊", "🐱", "🐰", "🐻", "🐼", "🦁", "🐯", "🐮"]
-
     def add_ai_player(
         self, room: GameRoom, ai_name: str, ai_config: AIPlayerConfig
     ) -> Player:
-        """添加AI玩家到房间"""
-        ai_player_id = f"ai_{ai_name}"
+        """Add an AI player with an opaque ID and the requested display name.
 
-        # 根据当前AI数量分配不同emoji
-        current_ai_count = len([p for p in room.players.values() if p.is_ai])
-        emoji = self.AI_EMOJIS[current_ai_count % len(self.AI_EMOJIS)]
+        Args:
+            room: Room receiving the player.
+            ai_name: Display name, preserved without a prefix.
+            ai_config: Model and identity configuration for the AI player.
 
-        # 预分配性格（但不显示在名称中，避免性格泄露）
+        Returns:
+            The newly added AI player.
+        """
+        ai_player_id = f"ai_{uuid4().hex}"
+
+        # Assign personality independently of the public display name.
         personality_name = self.ai_player_service.assign_personality(ai_player_id)
 
+        # Keep AI and human display names in the same format.
         player = Player(
             id=ai_player_id,
-            name=f"{emoji}{ai_name}",  # 移除性格标签，避免泄露
+            name=ai_name,
             is_ai=True,
             ai_config=ai_config,
         )
         room.add_player(player)
         logger.info(
-            f"[狼人杀] AI玩家 {emoji}{ai_name}({personality_name}) 加入房间 {room.group_id}，性格已隐藏"
+            f"[Werewolf] AI player {ai_name} ({personality_name}) joined room "
+            f"{room.group_id}; personality hidden from display name"
         )
         return player
 
@@ -155,10 +168,12 @@ class GameManager:
             # 随机打乱玩家顺序（确保编号随机分配）
             random.shuffle(players_list)
 
-            # 分配编号
+            # Assign random seat numbers and keep existing list displays in seat order.
+            room.number_to_player.clear()
             for index, player in enumerate(players_list, start=1):
                 player.assign_number(index)
                 room.number_to_player[index] = player.id
+            room.players = {player.id: player for player in players_list}
 
             # 分配角色
             roles_pool = self.config.get_roles_pool()
@@ -234,7 +249,19 @@ class GameManager:
     # ========== 胜负判定 ==========
 
     async def check_and_handle_victory(self, room: GameRoom) -> bool:
-        """检查胜负并处理，返回游戏是否结束"""
+        """Check victory without letting an old review affect a replacement room.
+
+        Args:
+            room: Room whose game outcome is being evaluated.
+
+        Returns:
+            Whether this game has finished or is no longer the active room.
+        """
+        if (
+            self.rooms.get(room.group_id) is not room
+            or room.phase == GamePhase.FINISHED
+        ):
+            return True
         try:
             victory_msg, winning_faction = VictoryChecker.check(room)
 
@@ -257,17 +284,21 @@ class GameManager:
             except Exception as e:
                 logger.error(f"[狼人杀] 发送胜利消息失败: {e}")
 
+            if self.rooms.get(room.group_id) is not room:
+                return True
             # 生成AI复盘（失败不影响游戏结束）
             try:
                 if winning_faction:
                     ai_review = await self.ai_reviewer.generate_review(
                         room, winning_faction
                     )
-                    if ai_review:
+                    if ai_review and self.rooms.get(room.group_id) is room:
                         await self.message_service.send_group_message(room, ai_review)
             except Exception as e:
                 logger.error(f"[狼人杀] AI复盘生成失败: {e}")
 
+            if self.rooms.get(room.group_id) is not room:
+                return True
             # 清理房间（确保一定会执行）
             logger.info(f"[狼人杀] 群 {room.group_id} 开始清理房间")
             await self.cleanup_room(room.group_id)
@@ -276,6 +307,8 @@ class GameManager:
             return True
         except Exception as e:
             logger.error(f"[狼人杀] 检查胜负处理失败: {e}")
+            if self.rooms.get(room.group_id) is not room:
+                return True
             # 确保房间被清理，避免处于不一致状态
             logger.info(f"[狼人杀] 群 {room.group_id} 异常清理房间")
             await self.cleanup_room(room.group_id)
