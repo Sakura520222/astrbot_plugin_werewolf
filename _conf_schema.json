@@ -1,8 +1,9 @@
 {
     "ai_player_model": {
-        "description": "AI玩家模型提供商ID",
-        "hint": "AI玩家发言、投票等决策使用的模型。留空使用默认模型。可在AstrBot的LLM配置中查看已配置的模型ID",
+        "description": "AI玩家模型",
+        "hint": "AI玩家发言、投票等决策使用的模型。留空使用默认模型。",
         "type": "string",
+        "_special": "select_provider",
         "default": ""
     },
     "enable_ai_review": {
@@ -12,9 +13,10 @@
         "default": true
     },
     "ai_review_model": {
-        "description": "AI复盘模型提供商ID",
-        "hint": "留空使用默认模型。可在AstrBot的LLM配置中查看已配置的模型ID",
+        "description": "AI复盘模型",
+        "hint": "AI复盘使用的模型。留空使用默认模型。",
         "type": "string",
+        "_special": "select_provider",
         "default": ""
     },
     "ai_review_prompt": {

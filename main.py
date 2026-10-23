@@ -4,22 +4,22 @@
 神职：预言家 + 女巫 + 猎人
 流程：创建房间 → 分配角色 → 夜晚（狼人办掉→预言家验人→女巫行动） → 白天投票 → 判断胜负
 """
-from astrbot.api.star import Context, Star, register
+
 from astrbot.api import logger
-from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.permission import PermissionType
 
+from .handlers import (
+    DayCommandHandler,
+    NightCommandHandler,
+    QueryCommandHandler,
+    RoomCommandHandler,
+)
 from .models import GameConfig
 from .services import GameManager
-from .handlers import (
-    RoomCommandHandler,
-    NightCommandHandler,
-    DayCommandHandler,
-    QueryCommandHandler,
-)
 
 
-@register("astrbot_plugin_werewolf", "miao", "狼人杀游戏（3狼3神3平民+AI复盘+AI玩家）", "v2.3.0")
 class WerewolfPlugin(Star):
     """狼人杀插件"""
 
@@ -49,7 +49,7 @@ class WerewolfPlugin(Star):
 
         if not game_config.validate():
             logger.warning(
-                f"[狼人杀] 角色配置不匹配！使用默认配置：9人局（3狼3神3平民）"
+                "[狼人杀] 角色配置不匹配！使用默认配置：9人局（3狼3神3平民）"
             )
             game_config = GameConfig.default()
 
@@ -58,9 +58,13 @@ class WerewolfPlugin(Star):
     def _log_startup(self) -> None:
         """打印启动日志"""
         config = self.game_config
-        ai_status = "已关闭" if not config.enable_ai_review else (
-            f"{config.ai_review_model if config.ai_review_model else '默认模型'}"
-            f"{' (自定义提示词)' if config.ai_review_prompt else ''}"
+        ai_status = (
+            "已关闭"
+            if not config.enable_ai_review
+            else (
+                f"{config.ai_review_model if config.ai_review_model else '默认模型'}"
+                f"{' (自定义提示词)' if config.ai_review_prompt else ''}"
+            )
         )
         logger.info(
             f"[狼人杀] 插件已加载 | "

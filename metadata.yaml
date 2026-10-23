@@ -2,5 +2,12 @@ name: astrbot_plugin_werewolf
 display_name: 狼人杀游戏
 desc: 狼人杀游戏插件（预言家+狼人+女巫+猎人+平民）- AI复盘
 version: v3.0.1
-author: miao
-repo: https://github.com/libin99527/astrbot_plugin_werewolf
+author: cherrysakura / miao
+repo: https://github.com/Sakura520222/astrbot_plugin_werewolf
+category: entertainment
+tags:
+  - 游戏
+  - 娱乐
+  - 狼人杀
+  - AI
+astrbot_version: ">=4.12,<5"
