@@ -17,8 +17,21 @@ if TYPE_CHECKING:
 class NightCommandHandler(BaseCommandHandler):
     """夜晚命令处理器"""
 
-    async def werewolf_kill(self, event: AstrMessageEvent) -> AsyncGenerator:
-        """狼人办掉"""
+    async def werewolf_kill(
+        self, event: AstrMessageEvent, *, abstain: bool = False
+    ) -> AsyncGenerator:
+        """Submit a private wolf ballot, including a no-target ballot.
+
+        Args:
+            event: Private command from the wolf.
+            abstain: Whether to submit an abstention instead of a kill target.
+
+        Yields:
+            The command result.
+        """
+        if not event.is_private_chat():
+            yield event.plain_result("⚠️ 请私聊机器人使用此命令！")
+            return
         player_id = event.get_sender_id()
         group_id, room = self.game_manager.get_room_by_player(player_id)
 
@@ -39,39 +52,40 @@ class NightCommandHandler(BaseCommandHandler):
             yield event.plain_result("❌ 你已经出局了！")
             return
 
-        # 获取目标
-        target_str = self.get_target_user(event)
-        if not target_str:
-            yield event.plain_result(
-                f"❌ 请指定目标！\n使用：{cmd('办掉')} 编号\n示例：{cmd('办掉')} 1"
-            )
-            return
-
-        target_id = room.parse_target(target_str)
-        if not target_id:
-            yield event.plain_result(
-                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
-            )
-            return
-
-        if not room.is_player_alive(target_id):
-            yield event.plain_result("❌ 目标玩家已经出局！")
-            return
-
-        # 记录投票
-        room.vote_state.night_votes[player_id] = target_id
-
-        # 记录日志
-        target_player = room.get_player(target_id)
-        room.log(f"🐺 {player.display_name}（狼人）选择刀 {target_player.display_name}")
-
-        # 同步刀人选择到AI狼人队友上下文
-        for teammate in room.get_alive_werewolves():
-            if teammate.id != player_id and teammate.is_ai and teammate.ai_context:
-                teammate.ai_context.current_round = room.current_round
-                teammate.ai_context.add_private_event(
-                    f"狼队友 {player.display_name} 选择刀 {target_player.display_name}"
+        target_str = "弃票" if abstain else self.get_target_user(event)
+        abstain = target_str == "弃票"
+        target_id = "ABSTAIN" if abstain else room.parse_target(target_str or "")
+        if not abstain:
+            if not target_str:
+                yield event.plain_result(
+                    f"❌ 请指定目标！\n使用：{cmd('办掉')} 编号，或 {cmd('弃票')}"
                 )
+                return
+            if not target_id:
+                yield event.plain_result(
+                    f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-{room.config.total_players}）"
+                )
+                return
+            if not room.is_player_alive(target_id):
+                yield event.plain_result("❌ 目标玩家已经出局！")
+                return
+
+        changed = room.vote_state.night_votes.get(player_id) != target_id
+        room.vote_state.night_votes[player_id] = target_id
+        target_player = room.get_player(target_id)
+        if changed:
+            ballot = (
+                "选择弃票，不提交刀人目标"
+                if abstain
+                else f"选择刀 {target_player.display_name}"
+            )
+            room.log(f"🐺 {player.display_name}（狼人）{ballot}")
+            for teammate in room.get_alive_werewolves():
+                if teammate.id != player_id and teammate.is_ai and teammate.ai_context:
+                    teammate.ai_context.current_round = room.current_round
+                    teammate.ai_context.add_private_event(
+                        f"狼队友 {player.display_name} {ballot}"
+                    )
 
         alive_wolves = room.get_alive_werewolves()
         human_wolves = [w for w in alive_wolves if not w.is_ai]
@@ -82,7 +96,8 @@ class NightCommandHandler(BaseCommandHandler):
 
         round_num = room.current_round
         yield event.plain_result(
-            f"✅ 你选择了办掉目标！当前 {human_voted_count}/{len(human_wolves)} 名人类狼人已投票"
+            f"✅ {'已弃票，不提交刀人目标' if abstain else '你选择了办掉目标'}！"
+            f"当前 {human_voted_count}/{len(human_wolves)} 名人类狼人已投票（含弃票）"
         )
         if (
             self.game_manager.get_room(group_id) is not room
@@ -92,11 +107,11 @@ class NightCommandHandler(BaseCommandHandler):
             return
 
         # 如果有AI狼人，每次人类狼人投票都触发AI重新决策
-        if ai_wolves:
+        if ai_wolves and changed:
             from ..phases import NightWolfPhase
 
             wolf_phase = NightWolfPhase(self.game_manager)
-            await wolf_phase.trigger_ai_wolf_vote(room)
+            await wolf_phase.trigger_ai_wolf_vote(room, reconsider=True)
             if (
                 self.game_manager.get_room(group_id) is not room
                 or room.phase != GamePhase.NIGHT_WOLF

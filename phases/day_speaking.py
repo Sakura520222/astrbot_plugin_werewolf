@@ -205,7 +205,11 @@ class DaySpeakingPhase(BasePhase):
             speech = await service.generate_speech(player, room, is_pk)
         except Exception:
             logger.exception("[Werewolf] AI speech generation failed")
-            speech = "我先听听大家怎么说吧"
+            from ..services.ai.actions.speech import SpeechAction
+
+            speech = SpeechAction.fallback_speech(
+                player, room, "pk_speech" if is_pk else "day_speech"
+            )
         if (
             not self._is_active(room, generation)
             or room.speaking_state.current_speaker_id != player.id

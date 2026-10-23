@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
-from ..models import GamePhase, Role
+from ..models import GamePhase
+from ..services.ai.actions.base import BaseAction
 from .base import BasePhase
 
 if TYPE_CHECKING:
@@ -75,17 +76,30 @@ class NightWolfPhase(BasePhase):
                     self._initial_ai_wolf_chat(room)
                 )
         elif ai_wolves:
-            # 全是AI狼人：创建后台任务处理（不使用wait_for，避免超时继续在其他阶段触发）
+            # The worker budget covers all serialized AI requests and retries.
             room.wolf_ai_process_task = asyncio.create_task(
                 self._process_all_ai_wolves_with_timeout(room)
             )
 
     async def _process_all_ai_wolves_with_timeout(self, room: "GameRoom") -> None:
-        """带超时保护的全AI狼人处理（作为独立任务运行）"""
+        """Bound the full wolf workflow without cutting short individual requests.
+
+        Args:
+            room: Room whose AI wolves must finish their chats and votes.
+        """
         round_number = room.current_round
+        ai_count = sum(wolf.is_ai for wolf in room.get_alive_werewolves())
+        # Each wolf chats and votes, with bounded retries and at most 7s of delays.
+        timeout = (
+            ai_count
+            * (
+                2 * BaseAction.MAX_DECISION_ATTEMPTS * BaseAction.LLM_TIMEOUT_SECONDS
+                + 7
+            )
+            + 30
+        )
         try:
-            # Bound AI work so an unavailable provider cannot stall the night.
-            await asyncio.wait_for(self._process_all_ai_wolves(room), timeout=60)
+            await asyncio.wait_for(self._process_all_ai_wolves(room), timeout=timeout)
             if self._is_current_phase(room, round_number):
                 await self._finish_and_next(room)
         except asyncio.CancelledError:
@@ -93,7 +107,12 @@ class NightWolfPhase(BasePhase):
         except Exception as exc:
             if not self._is_current_phase(room, round_number):
                 return
-            logger.warning("[Werewolf] AI wolf processing failed: %s", exc)
+            logger.warning(
+                "[Werewolf] AI wolf processing failed (%s, budget=%ss): %s",
+                type(exc).__name__,
+                timeout,
+                exc,
+            )
             await self._fallback_wolf_vote(room)
             if not self._is_current_phase(room, round_number):
                 return
@@ -112,19 +131,27 @@ class NightWolfPhase(BasePhase):
             await self._fallback_wolf_vote(room)
 
     async def _fallback_wolf_vote(self, room: "GameRoom") -> None:
-        """兜底策略：随机选择一个非狼人目标"""
-        from ..models import Role
+        """Abstain for unfinished AI wolves without overwriting submitted votes.
 
-        alive_wolves = room.get_alive_werewolves()
-        candidates = [p for p in room.get_alive_players() if p.role != Role.WEREWOLF]
-
-        if candidates and alive_wolves:
-            target = random.choice(candidates)
-            # 所有狼人都投同一个目标
-            for wolf in alive_wolves:
-                room.vote_state.night_votes[wolf.id] = target.id
-            room.log(f"🐺 狼人AI兜底：选择刀 {target.display_name}")
-            logger.info(f"[狼人杀] 狼人AI兜底投票: {target.display_name}")
+        Args:
+            room: Room still in the wolf phase.
+        """
+        for wolf in room.get_alive_werewolves():
+            if not wolf.is_ai or wolf.id in room.vote_state.night_votes:
+                continue
+            room.vote_state.night_votes[wolf.id] = "ABSTAIN"
+            if wolf.ai_context:
+                wolf.ai_context.decision_audit.append(
+                    {
+                        "round": room.current_round,
+                        "task": "werewolf_kill",
+                        "status": "failed_fallback",
+                        "error": "Wolf workflow ended before this ballot was submitted",
+                    }
+                )
+                wolf.ai_context.record_private_action("werewolf_kill", None)
+            room.log(f"🐺 {wolf.display_name} AI决策未完成，本次记为弃票")
+            logger.warning(f"[Werewolf AI] {wolf.name} unfinished wolf ballot: abstain")
 
     async def _ai_vote_timer(self, room: "GameRoom", delay: float) -> None:
         """AI投票定时器：在指定延迟后触发AI投票"""
@@ -220,15 +247,6 @@ class NightWolfPhase(BasePhase):
         round_number = room.current_round
         alive_wolves = room.get_alive_werewolves()
 
-        # 收集所有非狼人玩家作为候选目标
-        non_wolf_candidates = [
-            p for p in room.get_alive_players() if p.role != Role.WEREWOLF
-        ]
-        if not non_wolf_candidates:
-            # 没有可选目标（不可能发生）
-            logger.error(f"[狼人杀] 群 {room.group_id} 狼人无可用击杀目标")
-            return
-
         for wolf in alive_wolves:
             if not wolf.is_ai:
                 continue
@@ -274,15 +292,17 @@ class NightWolfPhase(BasePhase):
                             )
                     continue
 
-            # 如果AI没有选择或选择无效，随机选择一个非狼人目标
-            target_player = random.choice(non_wolf_candidates)
-            room.vote_state.night_votes[wolf.id] = target_player.id
-            room.log(
-                f"🐺 {wolf.display_name}（狼人AI）随机选择刀 {target_player.display_name}"
-            )
-            logger.info(
-                f"[狼人杀] AI狼人 {wolf.name} 随机击杀 {target_player.display_name}"
-            )
+            room.vote_state.night_votes[wolf.id] = "ABSTAIN"
+            if wolf.ai_context:
+                wolf.ai_context.record_private_action("werewolf_kill", None)
+            room.log(f"🐺 {wolf.display_name}（狼人AI）弃票，未提交有效刀人目标")
+            logger.info(f"[Werewolf AI] {wolf.name} wolf ballot: abstain")
+            for teammate in alive_wolves:
+                if teammate.id != wolf.id and teammate.is_ai and teammate.ai_context:
+                    teammate.ai_context.current_round = room.current_round
+                    teammate.ai_context.add_private_event(
+                        f"狼队友 {wolf.display_name} 本次弃票，未提交刀人目标"
+                    )
 
     async def _check_all_voted(self, room: "GameRoom") -> bool:
         """检查是否所有狼人都已投票"""
@@ -301,25 +321,16 @@ class NightWolfPhase(BasePhase):
         round_number = room.current_round
         if not self._is_current_phase(room, round_number):
             return
-        self._cancel_ai_vote_timer(room)
         await self.message_service.announce_timeout(room, "狼人行动")
         if not self._is_current_phase(room, round_number):
             return
 
-        # 检查是否有人类狼人投过票，如果有则触发AI狼人投票
-        alive_wolves = room.get_alive_werewolves()
-        human_wolves = [w for w in alive_wolves if not w.is_ai]
-        ai_wolves = [w for w in alive_wolves if w.is_ai]
-
-        # 只要有任何一个人类狼人投过票，就触发AI狼人投票
-        human_voted = any(w.id in room.vote_state.night_votes for w in human_wolves)
-
-        if human_voted and ai_wolves and not room.wolf_ai_voted:
-            logger.info(f"[狼人杀] 群 {room.group_id} 人类狼人已投票，触发AI狼人投票")
-            room.wolf_ai_voted = True
-            await self._handle_ai_werewolf_vote(room)
+        # Expiry ends the human window; shared AI requests keep their own budget.
+        if any(w.is_ai for w in room.get_alive_werewolves()):
+            await self.trigger_ai_wolf_vote(room)
             if not self._is_current_phase(room, round_number):
                 return
+            await self._fallback_wolf_vote(room)
 
         if room.vote_state.night_votes:
             # 有投票，处理
@@ -362,7 +373,11 @@ class NightWolfPhase(BasePhase):
     def _cancel_ai_tasks(self, room: "GameRoom") -> None:
         """取消所有AI相关的后台任务"""
         current_task = asyncio.current_task()
-        for field_name in ("wolf_ai_vote_task", "wolf_ai_process_task"):
+        for field_name in (
+            "wolf_ai_vote_task",
+            "wolf_ai_process_task",
+            "wolf_ai_ballot_task",
+        ):
             task = getattr(room, field_name)
             if task and task is not current_task and not task.done():
                 task.cancel()
@@ -373,24 +388,54 @@ class NightWolfPhase(BasePhase):
         self._cancel_ai_tasks(room)
 
     async def _trigger_ai_vote_and_finish(self, room: "GameRoom") -> None:
-        """触发AI投票并结束狼人阶段"""
+        """Submit AI ballots, then settle only if humans have also voted.
+
+        Args:
+            room: Room whose scheduled AI ballot worker is ready.
+        """
         round_number = room.current_round
-        if not self._is_current_phase(room, round_number) or room.wolf_ai_voted:
-            return
-        room.wolf_ai_voted = True
-        await self._handle_ai_werewolf_vote(room)
         if not self._is_current_phase(room, round_number):
             return
-        await self._finish_and_next(room)
-
-    async def trigger_ai_wolf_vote(self, room: "GameRoom") -> None:
-        """触发AI狼人投票（可多次调用，AI会根据最新信息重新决策）"""
-        if not self._is_current_phase(room):
+        await self.trigger_ai_wolf_vote(room)
+        if not self._is_current_phase(room, round_number):
             return
+        await self._check_all_voted(room)
 
-        # AI投票（每次人类投票后都重新决策）
-        await self._handle_ai_werewolf_vote(room)
-        logger.info(f"[狼人杀] 群 {room.group_id} AI狼人已投票/重新决策")
+    async def trigger_ai_wolf_vote(
+        self, room: "GameRoom", *, reconsider: bool = False
+    ) -> None:
+        """Share in-flight wolf decisions across human commands and phase timers.
+
+        Args:
+            room: Active wolf room.
+            reconsider: Whether a changed human ballot requests a new completed vote.
+        """
+        round_number = room.current_round
+        if not self._is_current_phase(room, round_number):
+            return
+        try:
+            chat_task = room.wolf_ai_process_task
+            if chat_task and chat_task is not asyncio.current_task():
+                await asyncio.shield(chat_task)
+            if not self._is_current_phase(room, round_number):
+                return
+            task = room.wolf_ai_ballot_task
+            if task is None or (reconsider and task.done()):
+                room.wolf_ai_voted = False
+                task = asyncio.create_task(self._handle_ai_werewolf_vote(room))
+                room.wolf_ai_ballot_task = task
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if not self._is_current_phase(room, round_number):
+                return
+            raise
+        except Exception:
+            if not self._is_current_phase(room, round_number):
+                return
+            logger.exception("[Werewolf] Shared wolf ballot worker failed")
+            await self._fallback_wolf_vote(room)
+        if self._is_current_phase(room, round_number):
+            room.wolf_ai_voted = True
 
     async def on_all_voted(self, room: "GameRoom") -> None:
         """所有狼人投票完成（包括AI）"""

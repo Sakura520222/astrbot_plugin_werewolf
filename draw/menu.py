@@ -139,6 +139,7 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
     night_cmds = [
         (f"{prefix}办掉 编号", "狼人办掉目标", COLOR_WEREWOLF),
         (f"{prefix}密谋 消息", "狼人密谋", COLOR_WEREWOLF),
+        (f"{prefix}弃票", "狼人不提交刀票\n全员弃票则空刀", COLOR_WEREWOLF),
         (f"{prefix}验人 编号", "预言家查验", COLOR_SEER),
         (f"{prefix}救人", "女巫救人", COLOR_WITCH),
         (f"{prefix}毒人 编号", "女巫毒人", COLOR_WITCH),
@@ -151,6 +152,7 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
         (f"{prefix}遗言完毕", "结束遗言", None),
         (f"{prefix}开始投票", "跳过发言\n（房主）", None),
         (f"{prefix}投票 编号", "投票放逐", None),
+        (f"{prefix}弃票", "白天或PK弃票\n计为已投票", None),
     ]
 
     # 计算高度

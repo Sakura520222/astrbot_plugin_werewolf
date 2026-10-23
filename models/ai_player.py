@@ -484,8 +484,16 @@ class AIPlayerContext:
                     "poison": f"我使用毒药毒了{target}；操作不代表确认其阵营",
                     "pass": "我当夜没有使用药水",
                     "seer_check": f"我选择查验{target}，真实结果见我的查验记录",
-                    "werewolf_kill": f"我个人选择刀{target}，与最终集体目标分开记录",
-                    "wolf_final_target": f"狼队最终集体刀口是{target}",
+                    "werewolf_kill": (
+                        f"我个人选择刀{target}，与最终集体目标分开记录"
+                        if record.get("target")
+                        else "我本次没有提交刀人目标，记为弃票"
+                    ),
+                    "wolf_final_target": (
+                        f"狼队最终集体刀口是{target}"
+                        if record.get("target")
+                        else "狼队当夜没有有效刀票，最终空刀"
+                    ),
                     "hunter_shoot": f"我实际开枪目标是{target}",
                 }[record["action"]]
                 records[f"A{index}"] = {

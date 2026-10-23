@@ -224,6 +224,24 @@ class WerewolfPlugin(Star):
         async for result in self.day_handler.day_vote(event):
             yield result
 
+    @filter.command("弃票")
+    async def abstain_vote(self, event: AstrMessageEvent):
+        """Submit a day ballot in a group or a wolf ballot in private.
+
+        Args:
+            event: Command from the abstaining player.
+
+        Yields:
+            The command result.
+        """
+        handler = (
+            self.night_handler.werewolf_kill
+            if event.is_private_chat()
+            else self.day_handler.day_vote
+        )
+        async for result in handler(event, abstain=True):
+            yield result
+
     @filter.command("AI投票")
     async def ai_vote(self, event: AstrMessageEvent):
         """触发AI发言和投票"""
