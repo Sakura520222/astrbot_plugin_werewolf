@@ -1,12 +1,7 @@
-"""女巫行动 - 用药决策"""
+"""Witch output parsing never confuses 'do not save' with saving."""
 
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
-from ..context import ContextBuilder
-from ..prompts import ANTI_HALLUCINATION_PROTOCOL, ROLE_PROMPTS, ROLE_SOUL_SETTINGS
-from ..validators import TargetValidator
 from .base import BaseAction
 
 if TYPE_CHECKING:
@@ -14,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class WitchAction(BaseAction):
-    """女巫行动"""
+    """Validate one available potion action against real inventory."""
 
     async def decide_action(
         self,
@@ -24,44 +19,39 @@ class WitchAction(BaseAction):
         can_poison: bool,
         killed_player_name: str | None = None,
     ) -> tuple[str, int | None]:
-        """AI女巫决定用药"""
-        context = ContextBuilder.build_context(player, room)
-        role_key = ContextBuilder.get_role_key(player)
-        soul_setting = ROLE_SOUL_SETTINGS.get(role_key, "")
+        """Choose save, poison or pass without creating unavailable medicine.
 
-        available_actions = []
-        if killed_player_name and can_save:
-            available_actions.append(
-                f" 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他"
-            )
-        if can_poison:
-            available_actions.append(" 你可以使用【毒药】毒死一个人")
-        if not available_actions:
-            available_actions.append(" 你的药都用完了，今晚无法行动")
+        Args:
+            player: Acting witch.
+            room: Current room.
+            can_save: Caller-provided permission, checked against inventory.
+            can_poison: Caller-provided permission, checked against inventory.
+            killed_player_name: Private attack notification for this turn.
 
-        prompt = ROLE_PROMPTS["witch_action"].format(
-            anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
-            soul_setting=soul_setting,
-            context=context,
-            available_actions="\n".join(available_actions),
+        Returns:
+            Validated action and optional poison target.
+        """
+        if not player.role or player.role.value != "witch" or not player.is_alive:
+            return ("pass", None)
+        state = room.witch_state
+        actions = ["pass"]
+        if (
+            can_save
+            and not state.antidote_used
+            and room.last_killed_id
+            and not state.has_acted
+        ):
+            actions.append("save")
+        if can_poison and not state.poison_used and not state.has_acted:
+            actions.append("poison")
+        guidance = (
+            f"本次被刀提示：{killed_player_name or '无人被刀'}；可选操作：{actions}。"
         )
-
-        response = await self._call_llm(prompt, player)
-        if response:
-            response_lower = response.lower()
-            if "救" in response_lower or "save" in response_lower:
-                return ("save", None)
-            elif "毒" in response_lower or "poison" in response_lower:
-                target = self.extract_number(response)
-                if target:
-                    # 验证毒药目标
-                    validated = TargetValidator.validate_poison_target(
-                        room, target, player
-                    )
-                    if validated:
-                        return ("poison", validated)
-                    # 如果目标无效，不毒
-                    logger.warning(
-                        f"[狼人杀AI] 女巫 {player.name} 毒的目标 {target} 无效，取消操作"
-                    )
-        return ("pass", None)
+        decision = await self._request_decision(
+            player,
+            room,
+            "witch_action",
+            guidance=guidance,
+            available_actions=actions,
+        )
+        return (decision.action, decision.target_number) if decision else ("pass", None)

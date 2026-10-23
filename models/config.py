@@ -61,6 +61,8 @@ class GameConfig:
     # AI玩家配置
     ai_player_model: str = ""
     ai_nicknames: list[str] = field(default_factory=lambda: list(DEFAULT_AI_NICKNAMES))
+    ai_personality_pool: list[str] = field(default_factory=list)
+    ai_personality_overrides: str = ""
 
     # AI复盘配置
     enable_ai_review: bool = True
@@ -141,6 +143,10 @@ class GameConfig:
             ai_nicknames=list(
                 nicknames if isinstance(nicknames, list) else DEFAULT_AI_NICKNAMES
             ),
+            ai_personality_pool=list(config.get("ai_personality_pool", []))
+            if isinstance(config.get("ai_personality_pool", []), list)
+            else [],
+            ai_personality_overrides=config.get("ai_personality_overrides", ""),
             enable_ai_review=config.get("enable_ai_review", True),
             ai_review_model=config.get("ai_review_model", ""),
             ai_review_prompt=config.get("ai_review_prompt", ""),

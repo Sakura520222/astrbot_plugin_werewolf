@@ -1,12 +1,7 @@
-"""预言家行动 - 验人"""
+"""Seer choices retain their actual, time-bounded reason."""
 
 from typing import TYPE_CHECKING
 
-from astrbot.api import logger
-
-from ..context import ContextBuilder
-from ..prompts import ANTI_HALLUCINATION_PROTOCOL, ROLE_PROMPTS, ROLE_SOUL_SETTINGS
-from ..validators import TargetValidator
 from .base import BaseAction
 
 if TYPE_CHECKING:
@@ -14,43 +9,19 @@ if TYPE_CHECKING:
 
 
 class SeerAction(BaseAction):
-    """预言家行动"""
+    """Choose a living player without guessing a number from explanation prose."""
 
     async def decide_check(self, player: "Player", room: "GameRoom") -> int | None:
-        """AI预言家选择验人目标"""
-        context = ContextBuilder.build_context(player, room)
-        role_key = ContextBuilder.get_role_key(player)
-        soul_setting = ROLE_SOUL_SETTINGS.get(role_key, "")
+        """Choose an authorized target.
 
-        prompt = ROLE_PROMPTS["seer_check"].format(
-            anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
-            soul_setting=soul_setting,
-            context=context,
-        )
+        Args:
+            player: Living seer.
+            room: Current room.
 
-        response = await self._call_llm(prompt, player)
-        if response:
-            target = self.extract_number(response)
-            if target:
-                # 预言家可以验存活的人
-                validated = TargetValidator.validate_check_target(room, target, player)
-                if validated:
-                    return validated
-                # 如果验证失败，随机选择
-                logger.warning(
-                    f"[狼人杀AI] 预言家 {player.name} 选择的目标无效，随机选择"
-                )
-                valid_targets = TargetValidator.get_valid_targets(
-                    room, exclude_player=player
-                )
-                # 排除已经验过的人
-                if player.ai_context and player.ai_context.seer_results:
-                    checked = [
-                        r.get("target_number") for r in player.ai_context.seer_results
-                    ]
-                    valid_targets = [t for t in valid_targets if t not in checked]
-                if valid_targets:
-                    import random
-
-                    return random.choice(valid_targets)
-        return None
+        Returns:
+            Legal target number or None after bounded failure.
+        """
+        if not player.role or player.role.value != "seer" or not player.is_alive:
+            return None
+        decision = await self._request_decision(player, room, "seer_check")
+        return decision.target_number if decision else None

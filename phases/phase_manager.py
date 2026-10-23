@@ -110,6 +110,12 @@ class PhaseManager:
             or room.hunter_state.pending_shot_player_id != hunter_id
         ):
             return
+        for observer in room.players.values():
+            if observer.is_ai and observer.ai_context:
+                observer.ai_context.current_round = room.current_round
+                observer.ai_context.add_event(
+                    f"系统公布：{hunter.display_name} 是猎人，获得一次开枪机会（尚未行动）"
+                )
         if hunter.is_ai:
             await self._handle_ai_hunter_shot(room, hunter, death_type)
             return
@@ -208,6 +214,7 @@ class PhaseManager:
         room.log(f"🔫 {hunter.display_name}（猎人）开枪带走 {target.display_name}")
         for player in room.players.values():
             if player.is_ai and player.ai_context:
+                player.ai_context.current_round = room.current_round
                 player.ai_context.add_event(
                     f"猎人 {hunter.display_name} 开枪带走 {target.display_name}"
                 )

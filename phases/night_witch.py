@@ -123,6 +123,8 @@ class NightWitchPhase(BasePhase):
             # 记录到女巫的AI上下文
             if witch.ai_context:
                 witch.ai_context.witch_saved_player = killed_player_name
+                witch.ai_context.witch_antidote_used = True
+                witch.ai_context.record_private_action("save", killed_player_name)
 
         elif action == "poison" and can_poison and target_number:
             target_player = room.get_player_by_number(target_number)
@@ -144,9 +146,15 @@ class NightWitchPhase(BasePhase):
                 # 记录到女巫的AI上下文
                 if witch.ai_context:
                     witch.ai_context.witch_poisoned_player = target_player.display_name
+                    witch.ai_context.witch_poison_used = True
+                    witch.ai_context.record_private_action(
+                        "poison", target_player.display_name
+                    )
 
         else:
             witch_state.has_acted = True
+            if witch.ai_context:
+                witch.ai_context.record_private_action("pass", None)
             room.log(f"💊 {witch.display_name}（女巫AI）选择不操作")
             logger.info(f"[狼人杀] AI女巫 {witch.name} 不操作")
 
@@ -295,6 +303,7 @@ class NightWitchPhase(BasePhase):
         # 添加到所有AI玩家的上下文
         for player in room.players.values():
             if player.is_ai and player.ai_context:
+                player.ai_context.current_round = room.current_round
                 player.ai_context.add_event(event)
 
     async def _wait_for_hunter_shot(self, room: "GameRoom") -> None:

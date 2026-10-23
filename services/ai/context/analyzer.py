@@ -1,212 +1,130 @@
-"""局势分析器 - 分析游戏局势和玩家行为"""
+"""Evidence-based observations, without keyword-derived identity labels."""
 
 import re
 from typing import TYPE_CHECKING
 
-from ..prompts import (
-    BEHAVIOR_ANALYSIS_TIPS,
-    DUEL_CONTEXT_TEMPLATE,
-    SITUATION_TEMPLATE,
-    TACTICAL_DIRECTIVES,
-)
+from ..prompts import DUEL_CONTEXT_TEMPLATE, SITUATION_TEMPLATE, TACTICAL_DIRECTIVES
 
 if TYPE_CHECKING:
     from ....models import GameRoom, Player
 
 
 class SituationAnalyzer:
-    """局势分析器"""
+    """Offer public progress and role-authorized tactical options."""
 
     @staticmethod
     def get_situation_awareness(room: "GameRoom") -> str:
-        """获取局势感知"""
-        alive_count = room.alive_count
+        """Render public progress only.
 
-        # 增强场上进度识别
-        total_players = len(room.players)
-        progress_ratio = alive_count / total_players if total_players else 0
+        Args:
+            room: Current room.
 
-        # 游戏阶段判断
-        if progress_ratio >= 0.8:
-            game_stage = "初期"
-            situation = "游戏初期，信息较少，需要谨慎发言和观察"
-            tactical_focus = "收集信息，隐藏身份，初步判断"
-        elif progress_ratio >= 0.6:
-            game_stage = "中期"
-            situation = "游戏中期，局势逐渐明朗，需要开始布局"
-            tactical_focus = "分析投票模式，识别阵营，准备关键行动"
-        elif progress_ratio >= 0.4:
-            game_stage = "中后期"
-            situation = "游戏中后期，关键人物可能已暴露，需要谨慎行动"
-            tactical_focus = "保护关键队友，精准打击敌人，控制投票走向"
-        else:
-            game_stage = "后期"
-            situation = "游戏后期，每一票都很关键，可能进入决胜局！"
-            tactical_focus = "全力争取胜利，必要时暴露身份，最后一搏"
-
-        # Public progress never reveals the actual surviving role distribution.
+        Returns:
+            Public counts without hidden role distribution.
+        """
         return SITUATION_TEMPLATE.format(
-            alive_count=alive_count,
-            situation=situation,
-            game_stage=game_stage,
-            tactical_focus=tactical_focus,
-            role_specific="阵营数量未知；请根据公开发言、投票和你有权掌握的信息自行推断。",
+            round_number=room.current_round,
+            alive_count=room.alive_count,
+            total_players=room.player_count,
         )
 
     @staticmethod
     def get_tactical_directive(player: "Player", room: "GameRoom") -> str:
-        """获取动态战术指令"""
-        from .builder import ContextBuilder
+        """Offer a wolf option from the wolf's known teammates.
 
-        role_key = ContextBuilder.get_role_key(player)
+        Args:
+            player: Acting player.
+            room: Current room.
 
-        # Only wolves may use the known living teammate distribution.
-        if role_key == "werewolf":
-            alive_count = room.alive_count
-            alive_wolves = room.get_alive_werewolves()
-            wolf_count = len(alive_wolves)
-            good_count = alive_count - wolf_count
-            if wolf_count >= good_count:
-                return TACTICAL_DIRECTIVES["wolf_advantage"]
-            elif wolf_count >= good_count - 1 and alive_count <= 5:
-                return TACTICAL_DIRECTIVES["wolf_final_push"]
-            elif wolf_count == 1 and alive_count >= 4:
-                return TACTICAL_DIRECTIVES["wolf_disadvantage"]
-            elif player.ai_context:
-                events = player.ai_context.game_events
-                for event in events:
-                    if "查杀" in event and any(
-                        teammate.display_name in event
-                        for teammate in alive_wolves
-                        if teammate.id != player.id
-                    ):
-                        return TACTICAL_DIRECTIVES["wolf_teammate_exposed"]
-            if player.ai_context:
-                events = player.ai_context.game_events
-                for event in events:
-                    if "预言家" in event and ("死" in event or "出局" in event):
-                        return TACTICAL_DIRECTIVES["good_confused"]
-            return TACTICAL_DIRECTIVES["normal"]
-
-        return ""
+        Returns:
+            A consideration rather than a compulsory tactic.
+        """
+        if not player.is_werewolf:
+            return ""
+        wolves = len(room.get_alive_werewolves())
+        if wolves == 1:
+            return TACTICAL_DIRECTIVES["wolf_disadvantage"]
+        return TACTICAL_DIRECTIVES["normal"]
 
     @staticmethod
     def get_duel_context(player: "Player", room: "GameRoom") -> str:
-        """检测对跳并生成辩论提示词"""
+        """Recognize only explicit first-person role claims with source evidence.
+
+        Args:
+            player: Observer whose public evidence is used.
+            room: Current room.
+
+        Returns:
+            A sourced description, or empty text when fewer than two claimants exist.
+        """
         if not player.ai_context:
             return ""
-
-        events = player.ai_context.game_events
-        seer_jumpers = []
-
-        for event in events:
-            if "预言家" in event and ("跳" in event or "是预言家" in event):
-                match = re.search(r"(\d+号\S*|\S+).*?预言家", event)
-                if match:
-                    jumper = match.group(1)
-                    if jumper not in seer_jumpers:
-                        seer_jumpers.append(jumper)
-
-        if len(seer_jumpers) >= 2:
-            if player.display_name in seer_jumpers:
-                opponent = [j for j in seer_jumpers if j != player.display_name][0]
-                return DUEL_CONTEXT_TEMPLATE["attacker"].format(opponent=opponent)
-            else:
-                return DUEL_CONTEXT_TEMPLATE["observer"].format(
-                    player_a=seer_jumpers[0], player_b=seer_jumpers[1]
-                )
-
-        return ""
+        claimants = {}
+        pattern = r"(?:^|[。！？；\n])\s*(?:我是(?:真)?预言家|我(?:昨晚|第[一二三四五六七八九十\d]+[晚夜])?(?:查验|验)(?:了)?\s*\d+号)"
+        for key, record in player.ai_context.evidence_records().items():
+            if record["kind"] not in ("S", "D"):
+                continue
+            if re.search(pattern, record["text"]):
+                claimants.setdefault(record["actor"], []).append(key)
+        if len(claimants) < 2:
+            return ""
+        names = list(claimants)
+        source = "；".join(
+            f"{name}的原话见{','.join(ids)}" for name, ids in claimants.items()
+        )
+        return (
+            DUEL_CONTEXT_TEMPLATE["observer"].format(
+                player_a=names[0], player_b=names[1]
+            )
+            + " 来源："
+            + source
+        )
 
 
 class BehaviorAnalyzer:
-    """玩家行为分析器"""
+    """Expose observable actions without classifying motives or identities."""
 
     @staticmethod
     def analyze_player_behaviors(room: "GameRoom") -> dict[str, list[str]]:
-        """分析所有玩家的行为并生成标签"""
-        player_tags: dict[str, list[str]] = {}
+        """Summarize visible activity without interpreting brevity or consensus.
 
-        for p in room.get_alive_players():
-            tags = []
-            if not p.ai_context:
-                continue
+        Args:
+            room: Current room.
 
-            speeches = (
-                p.ai_context.speeches if hasattr(p.ai_context, "speeches") else []
-            )
-            player_speeches = [s for s in speeches if s.get("player") == p.display_name]
-
-            if player_speeches:
-                last_speech = (
-                    player_speeches[-1].get("content", "") if player_speeches else ""
-                )
-                if len(last_speech) < 15 or any(
-                    kw in last_speech for kw in ["过了", "没想法", "听不出"]
-                ):
-                    tags.append("划水")
-
-            votes = (
-                p.ai_context.vote_history
-                if hasattr(p.ai_context, "vote_history")
-                else []
-            )
-            player_votes = [v for v in votes if v.get("voter") == p.display_name]
-
-            if len(player_votes) >= 2:
-                tags.append("跟票")
-
-            player_tags[p.display_name] = tags
-
-        return player_tags
+        Returns:
+            Observable counts per living player.
+        """
+        observer = next(
+            (p for p in room.players.values() if p.is_ai and p.ai_context), None
+        )
+        if observer is None:
+            return {}
+        ctx = observer.ai_context
+        return {
+            p.display_name: [
+                f"公开发言{sum(s['player'] == p.display_name for s in ctx.speeches)}次",
+                f"已提交投票{sum(v['voter'] == p.display_name for v in ctx.vote_history)}次",
+            ]
+            for p in room.get_alive_players()
+        }
 
     @staticmethod
     def get_behavior_analysis_prompt(player: "Player", room: "GameRoom") -> str:
-        """生成玩家行为分析提示词"""
+        """Reference actual evidence instead of assigning speculative labels.
+
+        Args:
+            player: Observer.
+            room: Current room.
+
+        Returns:
+            Source references for public player statements and ballots.
+        """
         if not player.ai_context:
             return ""
-
-        lines = ["【玩家行为画像 - 仅依据公开发言推测，不是身份事实】"]
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        for p in room.get_alive_players():
-            if p.id == player.id:
-                continue
-
-            tags = []
-            speeches = player.ai_context.speeches
-
-            p_speeches = [s for s in speeches if s.get("player") == p.display_name]
-
-            if p_speeches:
-                last_speech = p_speeches[-1].get("content", "")
-                if len(last_speech) < 20 or any(
-                    kw in last_speech for kw in ["过了", "没想法", "听不出", "不知道"]
-                ):
-                    tags.append("划水")
-                if any(kw in last_speech for kw in ["！", "?!", "什么鬼", "搞笑"]):
-                    tags.append("情绪激动")
-                if any(
-                    kw in last_speech for kw in ["因为", "所以", "逻辑", "分析", "证据"]
-                ):
-                    tags.append("逻辑清晰")
-                if any(
-                    kw in last_speech
-                    for kw in ["不一定是狼", "可能冤枉", "再看看", "先别投"]
-                ):
-                    tags.append("试图保人")
-                if any(
-                    kw in last_speech for kw in ["假预言家", "悍跳", "不信", "骗子"]
-                ):
-                    tags.append("攻击预言家")
-
-            if tags:
-                lines.append(f"- {p.display_name}：【标签：{'】【标签：'.join(tags)}】")
-
-        if len(lines) > 2:
-            lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            lines.append("")
-            lines.append(BEHAVIOR_ANALYSIS_TIPS)
-            return "\n".join(lines)
-
-        return ""
+        lines = []
+        for key, record in player.ai_context.evidence_records().items():
+            if record["kind"] in ("S", "D", "V"):
+                lines.append(
+                    f"{record['actor']}：{key}（{'已提交投票' if record['kind'] == 'V' else '原话声明'}）"
+                )
+        return "\n".join(lines)

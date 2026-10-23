@@ -68,7 +68,8 @@ class NightCommandHandler(BaseCommandHandler):
         # 同步刀人选择到AI狼人队友上下文
         for teammate in room.get_alive_werewolves():
             if teammate.id != player_id and teammate.is_ai and teammate.ai_context:
-                teammate.ai_context.add_event(
+                teammate.ai_context.current_round = room.current_round
+                teammate.ai_context.add_private_event(
                     f"狼队友 {player.display_name} 选择刀 {target_player.display_name}"
                 )
 
@@ -212,12 +213,16 @@ class NightCommandHandler(BaseCommandHandler):
         target_id = room.parse_target(target_str)
         if not target_id:
             yield event.plain_result(
-                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+                f"❌ 无效的目标：{target_str}\n请使用本局玩家编号（1-{room.config.total_players}）"
             )
             return
 
         if target_id == player_id:
             yield event.plain_result("❌ 不能验证自己！")
+            return
+
+        if not room.is_player_alive(target_id):
+            yield event.plain_result("❌ 不能验证已经出局的玩家！")
             return
 
         # 获取验人结果
@@ -333,7 +338,7 @@ class NightCommandHandler(BaseCommandHandler):
         target_id = room.parse_target(target_str)
         if not target_id:
             yield event.plain_result(
-                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+                f"❌ 无效的目标：{target_str}\n请使用本局玩家编号（1-{room.config.total_players}）"
             )
             return
 

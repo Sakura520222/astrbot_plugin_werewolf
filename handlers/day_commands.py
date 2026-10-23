@@ -181,12 +181,16 @@ class DayCommandHandler(BaseCommandHandler):
         target_id = room.parse_target(target_str)
         if not target_id:
             yield event.plain_result(
-                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+                f"❌ 无效的目标：{target_str}\n请使用本局玩家编号（1-{room.config.total_players}）"
             )
             return
 
         if not room.is_player_alive(target_id):
             yield event.plain_result("❌ 目标玩家已经出局！")
+            return
+
+        if target_id == player_id:
+            yield event.plain_result("❌ 不能投票给自己！")
             return
 
         # PK投票限制
