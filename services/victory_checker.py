@@ -1,5 +1,6 @@
 """胜负判定服务"""
-from typing import Tuple, Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..models import GameRoom
@@ -9,7 +10,7 @@ class VictoryChecker:
     """胜负判定服务"""
 
     @staticmethod
-    def check(room: "GameRoom") -> Tuple[Optional[str], Optional[str]]:
+    def check(room: "GameRoom") -> tuple[str | None, str | None]:
         """
         检查胜利条件
 

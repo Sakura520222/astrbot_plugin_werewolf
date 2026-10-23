@@ -1,12 +1,12 @@
 """白天发言阶段"""
-import asyncio
-import random
+
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from .base import BasePhase
 from ..models import GamePhase
 from ..services import BanService
+from .base import BasePhase
 
 if TYPE_CHECKING:
     from ..models import GameRoom
@@ -36,7 +36,9 @@ class DaySpeakingPhase(BasePhase):
         room.speaking_state.order = [p.id for p in alive_players]
         room.speaking_state.current_index = 0
 
-        logger.info(f"[狼人杀] 群 {room.group_id} 进入发言阶段，发言顺序共 {len(alive_players)} 人")
+        logger.info(
+            f"[狼人杀] 群 {room.group_id} 进入发言阶段，发言顺序共 {len(alive_players)} 人"
+        )
 
         # 确保全群禁言
         await BanService.set_group_whole_ban(room, True)
@@ -93,7 +95,9 @@ class DaySpeakingPhase(BasePhase):
         speech_list = room.speaking_state.current_speech
         is_pk = room.phase == GamePhase.DAY_PK
 
-        logger.info(f"[记录发言] 玩家={player.display_name}, is_ai={player.is_ai}, speech_list长度={len(speech_list)}")
+        logger.info(
+            f"[记录发言] 玩家={player.display_name}, is_ai={player.is_ai}, speech_list长度={len(speech_list)}"
+        )
 
         if speech_list:
             full_speech = " ".join(speech_list)
@@ -103,7 +107,9 @@ class DaySpeakingPhase(BasePhase):
             phase_tag = "💬PK发言" if is_pk else "💬发言"
             room.log(f"{phase_tag}：{player.display_name} - {full_speech}")
 
-            logger.info(f"[记录发言] 开始同步发言到AI上下文，内容={full_speech[:50]}...")
+            logger.info(
+                f"[记录发言] 开始同步发言到AI上下文，内容={full_speech[:50]}..."
+            )
 
             # 同步发言到所有AI玩家上下文
             ai_sync_count = 0
@@ -125,7 +131,9 @@ class DaySpeakingPhase(BasePhase):
         """下一个发言者"""
         speaking = room.speaking_state
 
-        logger.info(f"[狼人杀] 群 {room.group_id} _next_speaker: index={speaking.current_index}, total={len(speaking.order)}")
+        logger.info(
+            f"[狼人杀] 群 {room.group_id} _next_speaker: index={speaking.current_index}, total={len(speaking.order)}"
+        )
 
         # 检查是否所有人都发言完毕
         if speaking.current_index >= len(speaking.order):
@@ -145,7 +153,9 @@ class DaySpeakingPhase(BasePhase):
             await self._next_speaker(room)
             return
 
-        logger.info(f"[狼人杀] 群 {room.group_id} 轮到 {player.display_name} 发言 (index={speaking.current_index}, is_ai={player.is_ai})")
+        logger.info(
+            f"[狼人杀] 群 {room.group_id} 轮到 {player.display_name} 发言 (index={speaking.current_index}, is_ai={player.is_ai})"
+        )
 
         # 如果是AI玩家，自动发言
         if player.is_ai:
@@ -157,17 +167,20 @@ class DaySpeakingPhase(BasePhase):
 
         # 发送提示
         await self.message_service.send_group_at_message(
-            room, player,
+            room,
+            player,
             f" 现在轮到你发言\n\n"
             f"⏰ 发言时间：2分钟\n"
             f"💡 发言完毕后请使用：/发言完毕\n\n"
-            f"进度：{speaking.current_index + 1}/{len(speaking.order)}"
+            f"进度：{speaking.current_index + 1}/{len(speaking.order)}",
         )
 
         # 启动定时器
         await self.start_timer(room)
 
-    async def _handle_ai_speech(self, room: "GameRoom", player, is_pk: bool = False) -> None:
+    async def _handle_ai_speech(
+        self, room: "GameRoom", player, is_pk: bool = False
+    ) -> None:
         """处理AI玩家发言"""
         try:
             ai_service = self.game_manager.ai_player_service
@@ -240,11 +253,12 @@ class DaySpeakingPhase(BasePhase):
 
         # 发送提示
         await self.message_service.send_group_at_message(
-            room, player,
+            room,
+            player,
             f" PK发言：现在轮到你发言\n\n"
             f"⏰ 发言时间：2分钟\n"
             f"💡 发言完毕后请使用：/发言完毕\n\n"
-            f"进度：{speaking.current_index + 1}/{len(pk_players)}"
+            f"进度：{speaking.current_index + 1}/{len(pk_players)}",
         )
 
         # 启动定时器
@@ -275,11 +289,13 @@ class DaySpeakingPhase(BasePhase):
     async def _enter_vote_phase(self, room: "GameRoom") -> None:
         """进入投票阶段"""
         from .phase_manager import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
         await phase_manager.enter_vote_phase(room)
 
     async def _enter_pk_vote(self, room: "GameRoom") -> None:
         """进入PK投票"""
         from .phase_manager import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
         await phase_manager.enter_pk_vote_phase(room)

@@ -391,11 +391,11 @@ MIT License
 
 ---
 
-**作者**：miao
+**作者**：cherrysakura / miao
 **插件 ID**：astrbot_plugin_werewolf
-**版本**：v3.0.0
+**版本**：v3.0.1
 **框架**：AstrBot v4.5.0+
-**语言**：Python 3.8+
+**语言**：Python 3.12+
 
 ---
 

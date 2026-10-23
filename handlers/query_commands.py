@@ -1,13 +1,15 @@
 """查询命令处理"""
+
 import os
-from typing import TYPE_CHECKING, AsyncGenerator
-from astrbot.api.event import AstrMessageEvent
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from .base import BaseCommandHandler
-from ..models import GamePhase, Role
 from ..roles import RoleFactory
+from .base import BaseCommandHandler
 
 if TYPE_CHECKING:
     from ..services import GameManager
@@ -67,7 +69,9 @@ class QueryCommandHandler(BaseCommandHandler):
 
         for p in room.players.values():
             status_icon = "✅" if p.is_alive else "💀"
-            status_text += f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
+            status_text += (
+                f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
+            )
 
         yield event.plain_result(status_text)
 
@@ -84,13 +88,13 @@ class QueryCommandHandler(BaseCommandHandler):
             return
 
         # 构建玩家编号列表
-        numbers_text = (
-            "🔢 玩家编号列表\n\n"
-        )
+        numbers_text = "🔢 玩家编号列表\n\n"
 
         for p in room.players.values():
             status_icon = "✅" if p.is_alive else "💀"
-            numbers_text += f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
+            numbers_text += (
+                f"  {status_icon} {p.number}号 - {p.name or f'玩家{p.number}'}\n"
+            )
 
         yield event.plain_result(numbers_text)
 

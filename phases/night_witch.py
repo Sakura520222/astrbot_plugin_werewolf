@@ -1,14 +1,15 @@
 """夜晚-女巫行动阶段"""
+
 import asyncio
 import random
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from .base import BasePhase
 from ..models import GamePhase, Role
-from ..roles import HunterDeathType
+from ..roles import HunterDeathType, WitchRole
 from ..services import BanService
-from ..roles import WitchRole
+from .base import BasePhase
 
 if TYPE_CHECKING:
     from ..models import GameRoom
@@ -45,7 +46,7 @@ class NightWitchPhase(BasePhase):
         await self.message_service.announce_witch_phase(room)
 
         # 如果女巫是AI且存活或今晚被杀，自动处理
-        witch_killed_tonight = (room.last_killed_id == witch.id)
+        witch_killed_tonight = room.last_killed_id == witch.id
         if witch.is_ai and (witch.is_alive or witch_killed_tonight):
             await self._handle_ai_witch(room, witch)
             return
@@ -90,7 +91,9 @@ class NightWitchPhase(BasePhase):
             witch_state.saved_player_id = room.last_killed_id
             witch_state.antidote_used = True
             witch_state.has_acted = True
-            room.log(f"💊 {witch.display_name}（女巫AI）使用解药救了 {killed_player_name}")
+            room.log(
+                f"💊 {witch.display_name}（女巫AI）使用解药救了 {killed_player_name}"
+            )
             logger.info(f"[狼人杀] AI女巫 {witch.name} 救了 {killed_player_name}")
             # 记录到女巫的AI上下文
             if witch.ai_context:
@@ -99,12 +102,20 @@ class NightWitchPhase(BasePhase):
         elif action == "poison" and can_poison and target_number:
             target_player = room.get_player_by_number(target_number)
             # 确保目标存活且不是自己
-            if target_player and target_player.is_alive and target_player.id != witch.id:
+            if (
+                target_player
+                and target_player.is_alive
+                and target_player.id != witch.id
+            ):
                 witch_state.poisoned_player_id = target_player.id
                 witch_state.poison_used = True
                 witch_state.has_acted = True
-                room.log(f"💊 {witch.display_name}（女巫AI）使用毒药毒了 {target_player.display_name}")
-                logger.info(f"[狼人杀] AI女巫 {witch.name} 毒了 {target_player.display_name}")
+                room.log(
+                    f"💊 {witch.display_name}（女巫AI）使用毒药毒了 {target_player.display_name}"
+                )
+                logger.info(
+                    f"[狼人杀] AI女巫 {witch.name} 毒了 {target_player.display_name}"
+                )
                 # 记录到女巫的AI上下文
                 if witch.ai_context:
                     witch.ai_context.witch_poisoned_player = target_player.display_name
@@ -122,19 +133,19 @@ class NightWitchPhase(BasePhase):
         if not witch:
             return random.uniform(
                 self.game_manager.config.timeout_dead_min,
-                self.game_manager.config.timeout_dead_max
+                self.game_manager.config.timeout_dead_max,
             )
 
         # 女巫存活，或今晚被杀（可以救自己）
         witch_alive = witch.is_alive
-        witch_killed_tonight = (room.last_killed_id == witch.id)
+        witch_killed_tonight = room.last_killed_id == witch.id
 
         if witch_alive or witch_killed_tonight:
             return self.timeout_seconds
         else:
             return random.uniform(
                 self.game_manager.config.timeout_dead_min,
-                self.game_manager.config.timeout_dead_max
+                self.game_manager.config.timeout_dead_max,
             )
 
     async def _notify_witch(self, room: "GameRoom") -> None:
@@ -144,7 +155,7 @@ class NightWitchPhase(BasePhase):
             return
 
         # 女巫存活 或 今晚被杀（可以救自己）时才通知
-        witch_killed_tonight = (room.last_killed_id == witch.id)
+        witch_killed_tonight = room.last_killed_id == witch.id
         if not witch.is_alive and not witch_killed_tonight:
             return
 
@@ -180,7 +191,9 @@ class NightWitchPhase(BasePhase):
 
         # 处理猎人死亡
         await self._handle_hunter_death(room)
-        logger.info(f"[狼人杀] 群 {room.group_id} 猎人死亡处理完成，pending_shot={room.hunter_state.pending_shot_player_id}")
+        logger.info(
+            f"[狼人杀] 群 {room.group_id} 猎人死亡处理完成，pending_shot={room.hunter_state.pending_shot_player_id}"
+        )
 
         # 发送天亮消息
         await self._announce_dawn(room)
@@ -226,29 +239,41 @@ class NightWitchPhase(BasePhase):
         saved = bool(room.witch_state.saved_player_id)
 
         # 调试日志：记录关键状态
-        logger.info(f"[天亮判断] last_killed_id={room.last_killed_id}, saved_player_id={room.witch_state.saved_player_id}, saved={saved}")
+        logger.info(
+            f"[天亮判断] last_killed_id={room.last_killed_id}, saved_player_id={room.witch_state.saved_player_id}, saved={saved}"
+        )
 
         if room.last_killed_id and not saved:
             killed_player = room.get_player(room.last_killed_id)
-            logger.info(f"[天亮判断] killed_player={'存在' if killed_player else 'None'}, is_alive={killed_player.is_alive if killed_player else 'N/A'}")
+            logger.info(
+                f"[天亮判断] killed_player={'存在' if killed_player else 'None'}, is_alive={killed_player.is_alive if killed_player else 'N/A'}"
+            )
             if killed_player:
                 killed_name = killed_player.display_name
                 logger.info(f"[天亮判断] 确认死亡: {killed_name}")
             else:
-                logger.error(f"[BUG] last_killed_id={room.last_killed_id} 但玩家对象不存在！这会导致误判为平安夜")
+                logger.error(
+                    f"[BUG] last_killed_id={room.last_killed_id} 但玩家对象不存在！这会导致误判为平安夜"
+                )
 
         if room.witch_state.poisoned_player_id:
             poisoned_player = room.get_player(room.witch_state.poisoned_player_id)
             if poisoned_player:
                 poisoned_name = poisoned_player.display_name
 
-        logger.info(f"[天亮判断] 最终结果: killed_name={killed_name}, poisoned_name={poisoned_name}")
-        await self.message_service.announce_dawn(room, killed_name, saved, poisoned_name)
+        logger.info(
+            f"[天亮判断] 最终结果: killed_name={killed_name}, poisoned_name={poisoned_name}"
+        )
+        await self.message_service.announce_dawn(
+            room, killed_name, saved, poisoned_name
+        )
 
         # 记录天亮事件到所有AI玩家上下文（只公布谁死了，不公布死因）
         self._record_dawn_event_to_ai(room, killed_name, poisoned_name)
 
-    def _record_dawn_event_to_ai(self, room: "GameRoom", killed_name, poisoned_name) -> None:
+    def _record_dawn_event_to_ai(
+        self, room: "GameRoom", killed_name, poisoned_name
+    ) -> None:
         """记录天亮事件到AI上下文（只记录公开信息）"""
         dead_names = []
         if killed_name:
@@ -269,12 +294,14 @@ class NightWitchPhase(BasePhase):
     async def _wait_for_hunter_shot(self, room: "GameRoom") -> None:
         """等待猎人开枪"""
         from .phase_manager import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
         await phase_manager.wait_for_hunter_shot(room, "wolf")
 
     async def _enter_day_phase(self, room: "GameRoom") -> None:
         """进入白天阶段"""
         from .phase_manager import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
 
         # 第一晚被杀有遗言

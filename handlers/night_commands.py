@@ -1,14 +1,16 @@
 """夜晚命令处理"""
-import re
-from typing import TYPE_CHECKING, AsyncGenerator
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api import logger
 
-from .base import BaseCommandHandler
+import re
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
+
+from astrbot.api.event import AstrMessageEvent
+
 from ..models import GamePhase, Role
+from .base import BaseCommandHandler
 
 if TYPE_CHECKING:
-    from ..services import GameManager
+    pass
 
 
 class NightCommandHandler(BaseCommandHandler):
@@ -44,7 +46,9 @@ class NightCommandHandler(BaseCommandHandler):
 
         target_id = room.parse_target(target_str)
         if not target_id:
-            yield event.plain_result(f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）")
+            yield event.plain_result(
+                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+            )
             return
 
         if not room.is_player_alive(target_id):
@@ -61,18 +65,25 @@ class NightCommandHandler(BaseCommandHandler):
         # 同步刀人选择到AI狼人队友上下文
         for teammate in room.get_alive_werewolves():
             if teammate.id != player_id and teammate.is_ai and teammate.ai_context:
-                teammate.ai_context.add_event(f"狼队友 {player.display_name} 选择刀 {target_player.display_name}")
+                teammate.ai_context.add_event(
+                    f"狼队友 {player.display_name} 选择刀 {target_player.display_name}"
+                )
 
         alive_wolves = room.get_alive_werewolves()
         human_wolves = [w for w in alive_wolves if not w.is_ai]
         ai_wolves = [w for w in alive_wolves if w.is_ai]
-        human_voted_count = sum(1 for w in human_wolves if w.id in room.vote_state.night_votes)
+        human_voted_count = sum(
+            1 for w in human_wolves if w.id in room.vote_state.night_votes
+        )
 
-        yield event.plain_result(f"✅ 你选择了办掉目标！当前 {human_voted_count}/{len(human_wolves)} 名人类狼人已投票")
+        yield event.plain_result(
+            f"✅ 你选择了办掉目标！当前 {human_voted_count}/{len(human_wolves)} 名人类狼人已投票"
+        )
 
         # 如果有AI狼人，每次人类狼人投票都触发AI重新决策
         if ai_wolves:
             from ..phases import NightWolfPhase
+
             wolf_phase = NightWolfPhase(self.game_manager)
             await wolf_phase.trigger_ai_wolf_vote(room)
 
@@ -80,6 +91,7 @@ class NightCommandHandler(BaseCommandHandler):
         all_voted = len(room.vote_state.night_votes) >= len(alive_wolves)
         if all_voted:
             from ..phases import NightWolfPhase
+
             wolf_phase = NightWolfPhase(self.game_manager)
             await wolf_phase.on_all_voted(room)
 
@@ -110,7 +122,9 @@ class NightCommandHandler(BaseCommandHandler):
             return
 
         # 提取消息内容
-        message_text = re.sub(r'^/?\s*(狼人杀\s*)?密谋\s*', '', event.message_str).strip()
+        message_text = re.sub(
+            r"^/?\s*(狼人杀\s*)?密谋\s*", "", event.message_str
+        ).strip()
         if not message_text:
             yield event.plain_result("❌ 请输入要发送的消息！\n用法：/密谋 消息内容")
             return
@@ -129,18 +143,19 @@ class NightCommandHandler(BaseCommandHandler):
                 # AI队友：加入上下文
                 if teammate.ai_context:
                     teammate.ai_context.add_wolf_chat(
-                        player.display_name,
-                        message_text,
-                        room.current_round
+                        player.display_name, message_text, room.current_round
                     )
                 success_count += 1
             else:
                 # 人类队友：发送私聊
-                if await self.message_service.send_private_message(room, teammate.id, msg):
+                if await self.message_service.send_private_message(
+                    room, teammate.id, msg
+                ):
                     success_count += 1
 
         # 更新最后密谋时间
         import time
+
         room.wolf_last_chat_time = time.time()
 
         room.log(f"💬 {player.display_name}（狼人）密谋：{message_text}")
@@ -171,12 +186,16 @@ class NightCommandHandler(BaseCommandHandler):
         # 获取目标
         target_str = self.get_target_user(event)
         if not target_str:
-            yield event.plain_result("❌ 请指定验证目标！\n使用：/验人 编号\n示例：/验人 3")
+            yield event.plain_result(
+                "❌ 请指定验证目标！\n使用：/验人 编号\n示例：/验人 3"
+            )
             return
 
         target_id = room.parse_target(target_str)
         if not target_id:
-            yield event.plain_result(f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）")
+            yield event.plain_result(
+                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+            )
             return
 
         if target_id == player_id:
@@ -188,16 +207,25 @@ class NightCommandHandler(BaseCommandHandler):
         is_werewolf = target_player and target_player.role == Role.WEREWOLF
 
         if is_werewolf:
-            result_msg = f"🔮 验人结果：\n\n玩家 {target_player.display_name} 是 🐺 狼人！"
-            room.log(f"🔮 {player.display_name}（预言家）验 {target_player.display_name}：狼人")
+            result_msg = (
+                f"🔮 验人结果：\n\n玩家 {target_player.display_name} 是 🐺 狼人！"
+            )
+            room.log(
+                f"🔮 {player.display_name}（预言家）验 {target_player.display_name}：狼人"
+            )
         else:
-            result_msg = f"🔮 验人结果：\n\n玩家 {target_player.display_name} 是 ✅ 好人！"
-            room.log(f"🔮 {player.display_name}（预言家）验 {target_player.display_name}：好人")
+            result_msg = (
+                f"🔮 验人结果：\n\n玩家 {target_player.display_name} 是 ✅ 好人！"
+            )
+            room.log(
+                f"🔮 {player.display_name}（预言家）验 {target_player.display_name}：好人"
+            )
 
         yield event.plain_result(result_msg)
 
         # 进入女巫阶段
         from ..phases import NightSeerPhase
+
         seer_phase = NightSeerPhase(self.game_manager)
         await seer_phase.on_checked(room)
 
@@ -238,11 +266,14 @@ class NightCommandHandler(BaseCommandHandler):
         witch_state.has_acted = True
 
         saved_player = room.get_player(room.last_killed_id)
-        room.log(f"💊 {player.display_name}（女巫）使用解药救了 {saved_player.display_name}")
+        room.log(
+            f"💊 {player.display_name}（女巫）使用解药救了 {saved_player.display_name}"
+        )
 
         yield event.plain_result(f"✅ 你使用解药救了 {saved_player.display_name}！")
 
         from ..phases import NightWitchPhase
+
         witch_phase = NightWitchPhase(self.game_manager)
         await witch_phase.on_acted(room)
 
@@ -276,12 +307,16 @@ class NightCommandHandler(BaseCommandHandler):
         # 获取目标
         target_str = self.get_target_user(event)
         if not target_str:
-            yield event.plain_result("❌ 请指定毒人目标！\n使用：/毒人 编号\n示例：/毒人 5")
+            yield event.plain_result(
+                "❌ 请指定毒人目标！\n使用：/毒人 编号\n示例：/毒人 5"
+            )
             return
 
         target_id = room.parse_target(target_str)
         if not target_id:
-            yield event.plain_result(f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）")
+            yield event.plain_result(
+                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+            )
             return
 
         if not room.is_player_alive(target_id):
@@ -298,11 +333,14 @@ class NightCommandHandler(BaseCommandHandler):
         witch_state.has_acted = True
 
         target_player = room.get_player(target_id)
-        room.log(f"💊 {player.display_name}（女巫）使用毒药毒了 {target_player.display_name}")
+        room.log(
+            f"💊 {player.display_name}（女巫）使用毒药毒了 {target_player.display_name}"
+        )
 
         yield event.plain_result(f"✅ 你使用毒药毒了 {target_player.display_name}！")
 
         from ..phases import NightWitchPhase
+
         witch_phase = NightWitchPhase(self.game_manager)
         await witch_phase.on_acted(room)
 
@@ -335,6 +373,7 @@ class NightCommandHandler(BaseCommandHandler):
         yield event.plain_result("✅ 你选择不操作！")
 
         from ..phases import NightWitchPhase
+
         witch_phase = NightWitchPhase(self.game_manager)
         await witch_phase.on_acted(room)
 
@@ -361,6 +400,7 @@ class NightCommandHandler(BaseCommandHandler):
             return
 
         from ..roles import HunterDeathType
+
         if room.hunter_state.death_type == HunterDeathType.POISON:
             yield event.plain_result("❌ 你被女巫毒死，不能开枪！")
             return
@@ -373,7 +413,9 @@ class NightCommandHandler(BaseCommandHandler):
 
         target_id = room.parse_target(target_str)
         if not target_id:
-            yield event.plain_result(f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）")
+            yield event.plain_result(
+                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+            )
             return
 
         if not room.is_player_alive(target_id):
@@ -390,5 +432,6 @@ class NightCommandHandler(BaseCommandHandler):
         yield event.plain_result(f"💥 你开枪带走了 {target_player.display_name}！")
 
         from ..phases import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
         await phase_manager.on_hunter_shot(room, target_id)

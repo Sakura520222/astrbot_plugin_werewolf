@@ -1,12 +1,14 @@
 """遗言阶段"""
+
 import asyncio
 import random
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from .base import BasePhase
 from ..models import GamePhase
 from ..services import BanService
+from .base import BasePhase
 
 if TYPE_CHECKING:
     from ..models import GameRoom
@@ -56,10 +58,9 @@ class LastWordsPhase(BasePhase):
 
         # 发送遗言提示
         await self.message_service.send_group_at_message(
-            room, killed_player,
-            f" 现在请你留遗言\n\n"
-            f"⏰ 遗言时间：2分钟\n"
-            f"💡 遗言完毕后请使用：/遗言完毕"
+            room,
+            killed_player,
+            " 现在请你留遗言\n\n⏰ 遗言时间：2分钟\n💡 遗言完毕后请使用：/遗言完毕",
         )
 
         # 启动定时器
@@ -154,8 +155,9 @@ class LastWordsPhase(BasePhase):
         # 检查游戏是否结束
         if await self.game_manager.check_and_handle_victory(room):
             return
-            
+
         from .phase_manager import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
 
         if room.last_words_from_vote:

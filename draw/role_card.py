@@ -1,22 +1,23 @@
 """角色卡片图片生成"""
+
 from PIL import Image, ImageDraw
-from .styles import (
-    load_font,
-    COLOR_BACKGROUND_TOP,
-    COLOR_BACKGROUND_BOT,
-    COLOR_TITLE,
-    COLOR_TEXT_LIGHT,
-    COLOR_TEXT_DIM,
-    COLOR_CARD_BG,
-    COLOR_WEREWOLF,
-    COLOR_SEER,
-    COLOR_WITCH,
-    COLOR_HUNTER,
-    COLOR_VILLAGER,
-    COLOR_GOOD_CAMP,
-    COLOR_EVIL_CAMP,
-)
+
 from .gradient_utils import create_vertical_gradient
+from .styles import (
+    COLOR_BACKGROUND_BOT,
+    COLOR_BACKGROUND_TOP,
+    COLOR_CARD_BG,
+    COLOR_EVIL_CAMP,
+    COLOR_GOOD_CAMP,
+    COLOR_HUNTER,
+    COLOR_SEER,
+    COLOR_TEXT_DIM,
+    COLOR_TEXT_LIGHT,
+    COLOR_VILLAGER,
+    COLOR_WEREWOLF,
+    COLOR_WITCH,
+    load_font,
+)
 
 # 角色配置
 ROLE_CONFIG = {
@@ -84,7 +85,9 @@ ROLE_CONFIG = {
 }
 
 
-def draw_role_card(role_name: str, player_number: int = None, teammates: list = None) -> Image.Image:
+def draw_role_card(
+    role_name: str, player_number: int = None, teammates: list = None
+) -> Image.Image:
     """
     生成角色卡片图片
 
@@ -110,31 +113,55 @@ def draw_role_card(role_name: str, player_number: int = None, teammates: list = 
     tip_font = load_font(14)
 
     # 创建画布
-    image = create_vertical_gradient(width, height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT)
+    image = create_vertical_gradient(
+        width, height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT
+    )
     draw = ImageDraw.Draw(image, "RGBA")
 
     # 角色图标和名称
     y = 40
     role_text = f"{config['emoji']} {role_name}"
-    draw.text((width // 2, y), role_text, fill=config["color"], font=title_font, anchor="mm")
+    draw.text(
+        (width // 2, y), role_text, fill=config["color"], font=title_font, anchor="mm"
+    )
 
     # 阵营
     y += 45
-    draw.text((width // 2, y), config["camp"], fill=config["camp_color"], font=subtitle_font, anchor="mm")
+    draw.text(
+        (width // 2, y),
+        config["camp"],
+        fill=config["camp_color"],
+        font=subtitle_font,
+        anchor="mm",
+    )
 
     # 玩家编号
     if player_number:
         y += 30
-        draw.text((width // 2, y), f"你是 {player_number} 号玩家", fill=COLOR_TEXT_LIGHT, font=text_font, anchor="mm")
+        draw.text(
+            (width // 2, y),
+            f"你是 {player_number} 号玩家",
+            fill=COLOR_TEXT_LIGHT,
+            font=text_font,
+            anchor="mm",
+        )
 
     # 分割线
     y += 30
     line_margin = 60
-    draw.line([(line_margin, y), (width - line_margin, y)], fill=config["color"], width=2)
+    draw.line(
+        [(line_margin, y), (width - line_margin, y)], fill=config["color"], width=2
+    )
 
     # 角色描述
     y += 25
-    draw.text((width // 2, y), config["desc"], fill=COLOR_TEXT_LIGHT, font=text_font, anchor="mm")
+    draw.text(
+        (width // 2, y),
+        config["desc"],
+        fill=COLOR_TEXT_LIGHT,
+        font=text_font,
+        anchor="mm",
+    )
 
     # 技能提示卡片
     y += 35
@@ -157,7 +184,12 @@ def draw_role_card(role_name: str, player_number: int = None, teammates: list = 
     )
 
     # 卡片标题
-    draw.text((card_x0 + 15, card_y0 + 12), "💡 技能提示", fill=config["color"], font=text_font)
+    draw.text(
+        (card_x0 + 15, card_y0 + 12),
+        "💡 技能提示",
+        fill=config["color"],
+        font=text_font,
+    )
 
     # 技能列表
     tip_y = card_y0 + 38
@@ -170,7 +202,13 @@ def draw_role_card(role_name: str, player_number: int = None, teammates: list = 
     # 狼人队友信息
     if role_name == "狼人" and teammates:
         teammate_text = "🐺 你的狼队友：" + "、".join(teammates)
-        draw.text((width // 2, y), teammate_text, fill=COLOR_WEREWOLF, font=text_font, anchor="mm")
+        draw.text(
+            (width // 2, y),
+            teammate_text,
+            fill=COLOR_WEREWOLF,
+            font=text_font,
+            anchor="mm",
+        )
         y += 30
 
     # 底部提示

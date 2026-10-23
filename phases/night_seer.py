@@ -1,11 +1,13 @@
 """夜晚-预言家验人阶段"""
+
 import asyncio
 import random
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from .base import BasePhase
 from ..models import GamePhase, Role
+from .base import BasePhase
 
 if TYPE_CHECKING:
     from ..models import GameRoom
@@ -55,7 +57,7 @@ class NightSeerPhase(BasePhase):
         else:
             wait_time = random.uniform(
                 self.game_manager.config.timeout_dead_min,
-                self.game_manager.config.timeout_dead_max
+                self.game_manager.config.timeout_dead_max,
             )
 
         # 启动定时器
@@ -81,12 +83,18 @@ class NightSeerPhase(BasePhase):
 
                 # 记录到AI上下文
                 if seer.ai_context:
-                    seer.ai_context.add_seer_result(target_player.display_name, is_werewolf)
+                    seer.ai_context.add_seer_result(
+                        target_player.display_name, is_werewolf
+                    )
 
                 # 记录日志
                 result_str = "狼人" if is_werewolf else "好人"
-                room.log(f"🔮 {seer.display_name}（预言家AI）验 {target_player.display_name}：{result_str}")
-                logger.info(f"[狼人杀] AI预言家 {seer.name} 验 {target_player.display_name}：{result_str}")
+                room.log(
+                    f"🔮 {seer.display_name}（预言家AI）验 {target_player.display_name}：{result_str}"
+                )
+                logger.info(
+                    f"[狼人杀] AI预言家 {seer.name} 验 {target_player.display_name}：{result_str}"
+                )
 
         room.seer_checked = True
         await self._enter_witch_phase(room)
@@ -99,10 +107,13 @@ class NightSeerPhase(BasePhase):
 
         # 获取存活玩家列表
         alive_players = room.get_alive_players()
-        player_list = "\n".join([
-            f"  {p.number}号 - {p.display_name}"
-            for p in alive_players if p.id != seer.id
-        ])
+        player_list = "\n".join(
+            [
+                f"  {p.number}号 - {p.display_name}"
+                for p in alive_players
+                if p.id != seer.id
+            ]
+        )
 
         prompt = (
             f"🔮 预言家验人阶段\n\n"
@@ -135,5 +146,6 @@ class NightSeerPhase(BasePhase):
     async def _enter_witch_phase(self, room: "GameRoom") -> None:
         """进入女巫行动阶段"""
         from .phase_manager import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
         await phase_manager.enter_witch_phase(room)

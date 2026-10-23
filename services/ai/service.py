@@ -3,23 +3,24 @@
 这是原 ai_player_service.py 的模块化重构版本。
 将2000+行的单文件拆分为多个职责清晰的模块。
 """
+
 import random
-from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from .prompts import PERSONALITY_TEMPLATES, PERSONALITY_NAMES
-from .context import ContextBuilder
 from .actions import (
-    WerewolfAction,
-    SeerAction,
-    WitchAction,
     HunterAction,
+    SeerAction,
     SpeechAction,
-    VoteAction
+    VoteAction,
+    WerewolfAction,
+    WitchAction,
 )
+from .prompts import PERSONALITY_NAMES, PERSONALITY_TEMPLATES
 
 if TYPE_CHECKING:
-    from ...models import GameRoom, Player, GamePhase
+    from ...models import GameRoom, Player
 
 
 class AIPlayerService:
@@ -27,8 +28,8 @@ class AIPlayerService:
 
     def __init__(self, context):
         self.context = context
-        self._retry_counts: Dict[str, int] = {}
-        self._player_personalities: Dict[str, str] = {}
+        self._retry_counts: dict[str, int] = {}
+        self._player_personalities: dict[str, str] = {}
 
         # 初始化各行动模块
         self._werewolf_action = WerewolfAction(context)
@@ -50,17 +51,21 @@ class AIPlayerService:
 
     # ==================== 狼人行动 ====================
 
-    async def decide_werewolf_kill(self, player: "Player", room: "GameRoom") -> Optional[int]:
+    async def decide_werewolf_kill(
+        self, player: "Player", room: "GameRoom"
+    ) -> int | None:
         """AI狼人选择击杀目标"""
         return await self._werewolf_action.decide_kill(player, room)
 
-    async def decide_werewolf_chat(self, player: "Player", room: "GameRoom") -> Optional[str]:
+    async def decide_werewolf_chat(
+        self, player: "Player", room: "GameRoom"
+    ) -> str | None:
         """AI狼人生成密谋消息"""
         return await self._werewolf_action.decide_chat(player, room)
 
     # ==================== 预言家行动 ====================
 
-    async def decide_seer_check(self, player: "Player", room: "GameRoom") -> Optional[int]:
+    async def decide_seer_check(self, player: "Player", room: "GameRoom") -> int | None:
         """AI预言家选择验人目标"""
         return await self._seer_action.decide_check(player, room)
 
@@ -72,8 +77,8 @@ class AIPlayerService:
         room: "GameRoom",
         can_save: bool,
         can_poison: bool,
-        killed_player_name: Optional[str] = None
-    ) -> Tuple[str, Optional[int]]:
+        killed_player_name: str | None = None,
+    ) -> tuple[str, int | None]:
         """AI女巫决定用药"""
         return await self._witch_action.decide_action(
             player, room, can_save, can_poison, killed_player_name
@@ -81,13 +86,17 @@ class AIPlayerService:
 
     # ==================== 猎人行动 ====================
 
-    async def decide_hunter_shoot(self, player: "Player", room: "GameRoom") -> Optional[int]:
+    async def decide_hunter_shoot(
+        self, player: "Player", room: "GameRoom"
+    ) -> int | None:
         """AI猎人决定开枪目标"""
         return await self._hunter_action.decide_shoot(player, room)
 
     # ==================== 白天发言 ====================
 
-    async def generate_speech(self, player: "Player", room: "GameRoom", is_pk: bool = False) -> str:
+    async def generate_speech(
+        self, player: "Player", room: "GameRoom", is_pk: bool = False
+    ) -> str:
         """AI生成白天发言"""
         return await self._speech_action.generate_speech(player, room, is_pk)
 
@@ -98,8 +107,8 @@ class AIPlayerService:
         player: "Player",
         room: "GameRoom",
         is_pk: bool = False,
-        pk_candidates: List[str] = None
-    ) -> Tuple[str, Optional[int]]:
+        pk_candidates: list[str] = None,
+    ) -> tuple[str, int | None]:
         """AI生成投票决策"""
         return await self._vote_action.decide_vote(player, room, is_pk, pk_candidates)
 
@@ -119,7 +128,7 @@ class AIPlayerService:
             return
 
         ctx = AIPlayerContext()
-        
+
         # 增强自我认知 - 确保AI明确知道自己的编号和角色
         ctx.player_number = player.number
         ctx.role_name = player.role.display_name if player.role else "未知"
@@ -129,7 +138,7 @@ class AIPlayerService:
 
         # 添加自我认知笔记
         ctx.add_personal_note(f"我是{ctx.player_number}号玩家，身份是{ctx.role_name}。")
-        
+
         if ctx.is_werewolf:
             ctx.add_personal_note("我是狼人阵营，需要隐藏身份并配合队友击杀好人。")
         else:
@@ -137,26 +146,30 @@ class AIPlayerService:
 
         alive_list = [p.display_name for p in room.get_alive_players()]
         ctx.update_alive_players(alive_list, [])
-        
+
         # 添加初始记忆
-        ctx.add_key_event_memory(f"游戏开始，我是{ctx.player_number}号{ctx.role_name}", 8, {
-            "player_number": ctx.player_number,
-            "role": ctx.role_name,
-            "is_werewolf": ctx.is_werewolf
-        })
+        ctx.add_key_event_memory(
+            f"游戏开始，我是{ctx.player_number}号{ctx.role_name}",
+            8,
+            {
+                "player_number": ctx.player_number,
+                "role": ctx.role_name,
+                "is_werewolf": ctx.is_werewolf,
+            },
+        )
 
         if ctx.is_werewolf:
             teammates = [
-                w.display_name for w in room.get_alive_werewolves()
-                if w.id != player.id
+                w.display_name for w in room.get_alive_werewolves() if w.id != player.id
             ]
             ctx.werewolf_teammates = teammates
             if teammates:
                 ctx.add_personal_note(f"我的狼人队友是：{', '.join(teammates)}")
-                ctx.add_key_event_memory(f"识别狼人队友：{', '.join(teammates)}", 9, {
-                    "teammates": teammates,
-                    "count": len(teammates)
-                })
+                ctx.add_key_event_memory(
+                    f"识别狼人队友：{', '.join(teammates)}",
+                    9,
+                    {"teammates": teammates, "count": len(teammates)},
+                )
 
         player.ai_context = ctx
         logger.info(f"[狼人杀AI] 初始化 {player.name} 的上下文: {ctx.role_name}")
@@ -169,36 +182,50 @@ class AIPlayerService:
         ctx = player.ai_context
         old_round = ctx.current_round
         old_phase = ctx.current_phase
-        
+
         ctx.current_round = room.current_round
         ctx.current_phase = self._get_phase_description(room)
 
         alive_list = [p.display_name for p in room.get_alive_players()]
         dead_list = [p.display_name for p in room.players.values() if not p.is_alive]
         ctx.update_alive_players(alive_list, dead_list)
-        
+
         # 检查轮次变化，添加轮次记忆
         if old_round != ctx.current_round:
-            ctx.add_personal_note(f"进入第{ctx.current_round}轮，当前阶段：{ctx.current_phase}")
-            
+            ctx.add_personal_note(
+                f"进入第{ctx.current_round}轮，当前阶段：{ctx.current_phase}"
+            )
+
             # 分析轮次变化
             if old_round < ctx.current_round:
                 # 检查上一轮发生了什么
-                previous_round_events = [e for e in ctx.game_events if f"第{old_round}" in e]
+                previous_round_events = [
+                    e for e in ctx.game_events if f"第{old_round}" in e
+                ]
                 if previous_round_events:
-                    summary = f"第{old_round}轮总结：{'; '.join(previous_round_events[-3:])}"
+                    summary = (
+                        f"第{old_round}轮总结：{'; '.join(previous_round_events[-3:])}"
+                    )
                     ctx.add_round_summary(summary)
-        
+
         # 检查阶段变化，添加阶段记忆
         if old_phase != ctx.current_phase:
             ctx.add_personal_note(f"阶段变化：{old_phase} → {ctx.current_phase}")
-            
+
             # 根据角色添加阶段特定认知
             if ctx.role_name == "狼人" and "夜晚" in ctx.current_phase:
                 ctx.add_personal_note("进入夜晚，我是狼人，需要选择击杀目标。")
-            elif ctx.role_name == "预言家" and "夜晚" in ctx.current_phase and "验人" in ctx.current_phase:
+            elif (
+                ctx.role_name == "预言家"
+                and "夜晚" in ctx.current_phase
+                and "验人" in ctx.current_phase
+            ):
                 ctx.add_personal_note("进入夜晚，我是预言家，需要选择验人目标。")
-            elif ctx.role_name == "女巫" and "夜晚" in ctx.current_phase and "女巫" in ctx.current_phase:
+            elif (
+                ctx.role_name == "女巫"
+                and "夜晚" in ctx.current_phase
+                and "女巫" in ctx.current_phase
+            ):
                 ctx.add_personal_note("进入夜晚，我是女巫，需要决定是否用药。")
             elif "白天" in ctx.current_phase and "发言" in ctx.current_phase:
                 ctx.add_personal_note("进入白天发言阶段，我需要根据已有信息发言。")
@@ -211,19 +238,26 @@ class AIPlayerService:
             if room.last_killed_id:
                 killed = room.get_player(room.last_killed_id)
                 ctx.last_killed_player = killed.display_name if killed else None
-                
+
                 # 添加女巫特定记忆
                 if ctx.last_killed_player:
-                    ctx.add_personal_note(f"今晚{ctx.last_killed_player}被狼人击杀，我需要决定是否救他。")
-                    ctx.add_key_event_memory(f"女巫信息：{ctx.last_killed_player}被击杀", 7, {
-                        "killed_player": ctx.last_killed_player,
-                        "antidote_available": not ctx.witch_antidote_used,
-                        "poison_available": not ctx.witch_poison_used
-                    })
+                    ctx.add_personal_note(
+                        f"今晚{ctx.last_killed_player}被狼人击杀，我需要决定是否救他。"
+                    )
+                    ctx.add_key_event_memory(
+                        f"女巫信息：{ctx.last_killed_player}被击杀",
+                        7,
+                        {
+                            "killed_player": ctx.last_killed_player,
+                            "antidote_available": not ctx.witch_antidote_used,
+                            "poison_available": not ctx.witch_poison_used,
+                        },
+                    )
 
     def _get_phase_description(self, room: "GameRoom") -> str:
         """获取当前阶段的人类可读描述"""
         from ...models import GamePhase
+
         phase = room.phase
         round_num = room.current_round
 

@@ -1,5 +1,7 @@
 """统一验证器 - 确保AI操作的目标合法"""
-from typing import Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 if TYPE_CHECKING:
@@ -11,10 +13,8 @@ class TargetValidator:
 
     @staticmethod
     def validate_target(
-        room: "GameRoom",
-        target_number: int,
-        action_type: str = "操作"
-    ) -> Optional[int]:
+        room: "GameRoom", target_number: int, action_type: str = "操作"
+    ) -> int | None:
         """
         验证目标编号是否有效（玩家存在且存活）
 
@@ -44,15 +44,15 @@ class TargetValidator:
             )
             return None
 
-        logger.debug(f"[AI验证] {action_type}目标 {target_player.display_name} 验证通过")
+        logger.debug(
+            f"[AI验证] {action_type}目标 {target_player.display_name} 验证通过"
+        )
         return target_number
 
     @staticmethod
     def validate_vote_target(
-        room: "GameRoom",
-        target_number: int,
-        voter: "Player"
-    ) -> Optional[int]:
+        room: "GameRoom", target_number: int, voter: "Player"
+    ) -> int | None:
         """验证投票目标"""
         # 不能投自己
         if target_number == voter.number:
@@ -63,10 +63,8 @@ class TargetValidator:
 
     @staticmethod
     def validate_kill_target(
-        room: "GameRoom",
-        target_number: int,
-        attacker: "Player"
-    ) -> Optional[int]:
+        room: "GameRoom", target_number: int, attacker: "Player"
+    ) -> int | None:
         """验证击杀目标（狼人/猎人）"""
         # 不能杀自己
         if target_number == attacker.number:
@@ -77,28 +75,24 @@ class TargetValidator:
 
     @staticmethod
     def validate_poison_target(
-        room: "GameRoom",
-        target_number: int,
-        witch: "Player"
-    ) -> Optional[int]:
+        room: "GameRoom", target_number: int, witch: "Player"
+    ) -> int | None:
         """验证毒药目标"""
         # 不能毒自己
         if target_number == witch.number:
-            logger.warning(f"[AI验证] 女巫尝试毒自己，拒绝")
+            logger.warning("[AI验证] 女巫尝试毒自己，拒绝")
             return None
 
         return TargetValidator.validate_target(room, target_number, "毒杀")
 
     @staticmethod
     def validate_check_target(
-        room: "GameRoom",
-        target_number: int,
-        seer: "Player"
-    ) -> Optional[int]:
+        room: "GameRoom", target_number: int, seer: "Player"
+    ) -> int | None:
         """验证验人目标（预言家）"""
         # 不能验自己
         if target_number == seer.number:
-            logger.warning(f"[AI验证] 预言家尝试验自己，拒绝")
+            logger.warning("[AI验证] 预言家尝试验自己，拒绝")
             return None
 
         # 预言家可以验死人（但通常没意义）
@@ -113,9 +107,7 @@ class TargetValidator:
 
     @staticmethod
     def get_valid_targets(
-        room: "GameRoom",
-        exclude_player: "Player" = None,
-        include_dead: bool = False
+        room: "GameRoom", exclude_player: "Player" = None, include_dead: bool = False
     ) -> list:
         """
         获取所有有效目标列表

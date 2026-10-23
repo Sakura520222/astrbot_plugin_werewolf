@@ -1,13 +1,16 @@
 """白天命令处理"""
-from typing import TYPE_CHECKING, AsyncGenerator
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api import logger
 
-from .base import BaseCommandHandler
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
+
+from astrbot.api import logger
+from astrbot.api.event import AstrMessageEvent
+
 from ..models import GamePhase
+from .base import BaseCommandHandler
 
 if TYPE_CHECKING:
-    from ..services import GameManager
+    pass
 
 
 class DayCommandHandler(BaseCommandHandler):
@@ -35,10 +38,13 @@ class DayCommandHandler(BaseCommandHandler):
             yield event.plain_result("⚠️ 只有被杀的玩家才能使用此命令！")
             return
 
-        logger.info(f"[狼人杀] 群 {group_id} 玩家 {room.get_player(player_id).display_name} 遗言完毕")
+        logger.info(
+            f"[狼人杀] 群 {group_id} 玩家 {room.get_player(player_id).display_name} 遗言完毕"
+        )
         yield event.plain_result("✅ 遗言完毕！")
 
         from ..phases import LastWordsPhase
+
         last_words_phase = LastWordsPhase(self.game_manager)
         await last_words_phase.on_finish(room)
 
@@ -64,10 +70,13 @@ class DayCommandHandler(BaseCommandHandler):
             yield event.plain_result("⚠️ 现在不是你的发言时间！")
             return
 
-        logger.info(f"[狼人杀] 群 {group_id} 玩家 {room.get_player(player_id).display_name} 发言完毕")
+        logger.info(
+            f"[狼人杀] 群 {group_id} 玩家 {room.get_player(player_id).display_name} 发言完毕"
+        )
         yield event.plain_result("✅ 发言完毕！")
 
         from ..phases import DaySpeakingPhase
+
         speaking_phase = DaySpeakingPhase(self.game_manager)
         await speaking_phase.on_finish_speaking(room)
 
@@ -92,19 +101,25 @@ class DayCommandHandler(BaseCommandHandler):
             return
 
         creator = room.get_player(event.get_sender_id())
-        logger.info(f"[狼人杀] 群 {group_id} 房主 {creator.display_name} 跳过发言环节，直接进入投票")
-        
+        logger.info(
+            f"[狼人杀] 群 {group_id} 房主 {creator.display_name} 跳过发言环节，直接进入投票"
+        )
+
         # 取消定时器
         room.cancel_timer()
 
         # 取消当前发言者管理员
         from ..services import BanService
+
         if room.speaking_state.current_speaker_id:
-            await BanService.remove_temp_admin(room, room.speaking_state.current_speaker_id)
+            await BanService.remove_temp_admin(
+                room, room.speaking_state.current_speaker_id
+            )
 
         yield event.plain_result("✅ 房主跳过发言环节，直接进入投票！")
 
         from ..phases import PhaseManager
+
         phase_manager = PhaseManager(self.game_manager)
 
         if room.phase == GamePhase.DAY_PK:
@@ -141,12 +156,16 @@ class DayCommandHandler(BaseCommandHandler):
         # 获取目标
         target_str = self.get_target_user(event)
         if not target_str:
-            yield event.plain_result("❌ 请指定投票目标！\n使用：/投票 编号\n示例：/投票 2")
+            yield event.plain_result(
+                "❌ 请指定投票目标！\n使用：/投票 编号\n示例：/投票 2"
+            )
             return
 
         target_id = room.parse_target(target_str)
         if not target_id:
-            yield event.plain_result(f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）")
+            yield event.plain_result(
+                f"❌ 无效的目标：{target_str}\n请使用玩家编号（1-9）"
+            )
             return
 
         if not room.is_player_alive(target_id):
@@ -162,8 +181,8 @@ class DayCommandHandler(BaseCommandHandler):
                     if p:
                         pk_names.append(p.display_name)
                 yield event.plain_result(
-                    f"❌ PK投票只能投给平票玩家！\n\n"
-                    f"可投票对象：\n" + "\n".join([f"  • {name}" for name in pk_names])
+                    "❌ PK投票只能投给平票玩家！\n\n"
+                    "可投票对象：\n" + "\n".join([f"  • {name}" for name in pk_names])
                 )
                 return
 
@@ -191,6 +210,7 @@ class DayCommandHandler(BaseCommandHandler):
         # 检查是否所有人都投票了
         if len(room.vote_state.day_votes) >= room.alive_count:
             from ..phases import DayVotePhase
+
             vote_phase = DayVotePhase(self.game_manager)
             await vote_phase.on_all_voted(room)
 
@@ -226,24 +246,33 @@ class DayCommandHandler(BaseCommandHandler):
         # 触发AI发言和投票
         room.day_ai_voted = True
         logger.info(f"[狼人杀] 群 {group_id} 触发AI发言和投票")
-        
+
         # 获取PK候选人
         pk_candidates = None
         if room.vote_state.is_pk_vote:
-            pk_candidates = [room.get_player(pid).number for pid in room.vote_state.pk_players if room.get_player(pid)]
+            pk_candidates = [
+                room.get_player(pid).number
+                for pid in room.vote_state.pk_players
+                if room.get_player(pid)
+            ]
 
         # 处理AI发言和投票
         from ..phases import DayVotePhase
+
         vote_phase = DayVotePhase(self.game_manager)
-        await vote_phase._handle_ai_discussion_and_votes(room, room.vote_state.is_pk_vote, pk_candidates)
-        
+        await vote_phase._handle_ai_discussion_and_votes(
+            room, room.vote_state.is_pk_vote, pk_candidates
+        )
+
         # 检查是否所有人都投票了
         if await vote_phase._check_all_voted(room):
             yield event.plain_result("✅ AI发言和投票已完成，正在统计投票结果！")
         else:
             voted = len(room.vote_state.day_votes)
             total = room.alive_count
-            yield event.plain_result(f"✅ AI发言和投票已完成！当前已投票 {voted}/{total} 人")
+            yield event.plain_result(
+                f"✅ AI发言和投票已完成！当前已投票 {voted}/{total} 人"
+            )
 
     async def capture_speech(self, event: AstrMessageEvent) -> None:
         """捕获发言内容（非命令消息）"""
@@ -270,20 +299,28 @@ class DayCommandHandler(BaseCommandHandler):
             player = room.get_player(player_id)
             if player and player.is_alive:
                 # 记录到投票讨论
-                if not hasattr(room, 'vote_discussion'):
+                if not hasattr(room, "vote_discussion"):
                     room.vote_discussion = []
-                room.vote_discussion.append({
-                    "player": player.display_name,
-                    "content": message_text[:100]  # 限制长度
-                })
+                room.vote_discussion.append(
+                    {
+                        "player": player.display_name,
+                        "content": message_text[:100],  # 限制长度
+                    }
+                )
                 # 同步投票讨论到所有AI上下文（实时，使用专门的投票讨论字段）
                 for p in room.players.values():
                     if p.is_ai and p.ai_context:
-                        p.ai_context.add_vote_discussion(player.display_name, message_text[:120])
+                        p.ai_context.add_vote_discussion(
+                            player.display_name, message_text[:120]
+                        )
             return
 
         # 发言阶段和遗言阶段：只记录当前发言者
-        if room.phase not in (GamePhase.DAY_SPEAKING, GamePhase.DAY_PK, GamePhase.LAST_WORDS):
+        if room.phase not in (
+            GamePhase.DAY_SPEAKING,
+            GamePhase.DAY_PK,
+            GamePhase.LAST_WORDS,
+        ):
             return
 
         # 检查是否是当前发言者/遗言者

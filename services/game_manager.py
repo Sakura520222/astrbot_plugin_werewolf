@@ -1,15 +1,17 @@
 """游戏管理器"""
+
 import random
-from typing import Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from ..models import GameRoom, GameConfig, GamePhase, Player, Role, AIPlayerConfig
+from ..models import AIPlayerConfig, GameConfig, GamePhase, GameRoom, Player, Role
 from ..roles import RoleFactory
-from .message_service import MessageService
-from .ban_service import BanService
-from .victory_checker import VictoryChecker
-from .ai_reviewer import AIReviewer
 from .ai import AIPlayerService
+from .ai_reviewer import AIReviewer
+from .ban_service import BanService
+from .message_service import MessageService
+from .victory_checker import VictoryChecker
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
@@ -21,7 +23,7 @@ class GameManager:
     def __init__(self, context: "Context", config: GameConfig):
         self.context = context
         self.config = config
-        self.rooms: Dict[str, GameRoom] = {}  # {群ID: 房间}
+        self.rooms: dict[str, GameRoom] = {}  # {群ID: 房间}
 
         # 初始化服务
         self.message_service = MessageService(context)
@@ -30,11 +32,11 @@ class GameManager:
 
     # ========== 房间管理 ==========
 
-    def get_room(self, group_id: str) -> Optional[GameRoom]:
+    def get_room(self, group_id: str) -> GameRoom | None:
         """获取房间"""
         return self.rooms.get(group_id)
 
-    def get_room_by_player(self, player_id: str) -> Tuple[Optional[str], Optional[GameRoom]]:
+    def get_room_by_player(self, player_id: str) -> tuple[str | None, GameRoom | None]:
         """通过玩家ID查找房间"""
         for group_id, room in self.rooms.items():
             if room.is_player_in_room(player_id):
@@ -48,7 +50,7 @@ class GameManager:
             creator_id=creator_id,
             config=self.config,
             msg_origin=msg_origin,
-            bot=bot
+            bot=bot,
         )
         self.rooms[group_id] = room
         logger.info(f"[狼人杀] 群 {group_id} 创建房间")
@@ -110,7 +112,9 @@ class GameManager:
     # AI玩家emoji列表（按加入顺序分配）
     AI_EMOJIS = ["🤖", "🦊", "🐱", "🐰", "🐻", "🐼", "🦁", "🐯", "🐮"]
 
-    def add_ai_player(self, room: GameRoom, ai_name: str, ai_config: AIPlayerConfig) -> Player:
+    def add_ai_player(
+        self, room: GameRoom, ai_name: str, ai_config: AIPlayerConfig
+    ) -> Player:
         """添加AI玩家到房间"""
         ai_player_id = f"ai_{ai_name}"
 
@@ -125,10 +129,12 @@ class GameManager:
             id=ai_player_id,
             name=f"{emoji}{ai_name}",  # 移除性格标签，避免泄露
             is_ai=True,
-            ai_config=ai_config
+            ai_config=ai_config,
         )
         room.add_player(player)
-        logger.info(f"[狼人杀] AI玩家 {emoji}{ai_name}({personality_name}) 加入房间 {room.group_id}，性格已隐藏")
+        logger.info(
+            f"[狼人杀] AI玩家 {emoji}{ai_name}({personality_name}) 加入房间 {room.group_id}，性格已隐藏"
+        )
         return player
 
     def get_ai_players(self, room: GameRoom) -> list:
@@ -195,7 +201,9 @@ class GameManager:
         for player in room.players.values():
             # 跳过AI玩家（AI不需要接收私聊）
             if player.is_ai:
-                logger.info(f"[狼人杀] AI玩家 {player.name} 身份：{player.role.display_name if player.role else '未知'}")
+                logger.info(
+                    f"[狼人杀] AI玩家 {player.name} 身份：{player.role.display_name if player.role else '未知'}"
+                )
                 continue
 
             if player.role:
@@ -217,7 +225,9 @@ class GameManager:
                 # 如果图片发送失败，降级为文本
                 if not success:
                     role_info = RoleFactory.get_role_info(player.role, player, room)
-                    await self.message_service.send_private_message(room, player.id, role_info)
+                    await self.message_service.send_private_message(
+                        room, player.id, role_info
+                    )
 
                 logger.info(f"[狼人杀] 已私聊告知玩家 {player.id} 的身份：{role_name}")
 
@@ -232,21 +242,27 @@ class GameManager:
                 return False
 
             room.phase = GamePhase.FINISHED
-            logger.info(f"[狼人杀] 群 {room.group_id} 游戏结束，胜利阵营: {winning_faction}")
+            logger.info(
+                f"[狼人杀] 群 {room.group_id} 游戏结束，胜利阵营: {winning_faction}"
+            )
 
             # 获取角色公布文本
             roles_text = VictoryChecker.get_all_players_roles(room)
 
             # 发送胜利消息
             try:
-                await self.message_service.announce_victory(room, victory_msg, roles_text)
+                await self.message_service.announce_victory(
+                    room, victory_msg, roles_text
+                )
             except Exception as e:
                 logger.error(f"[狼人杀] 发送胜利消息失败: {e}")
 
             # 生成AI复盘（失败不影响游戏结束）
             try:
                 if winning_faction:
-                    ai_review = await self.ai_reviewer.generate_review(room, winning_faction)
+                    ai_review = await self.ai_reviewer.generate_review(
+                        room, winning_faction
+                    )
                     if ai_review:
                         await self.message_service.send_group_message(room, ai_review)
             except Exception as e:
@@ -268,7 +284,7 @@ class GameManager:
 
     # ========== 夜晚流程 ==========
 
-    async def process_night_kill(self, room: GameRoom) -> Optional[str]:
+    async def process_night_kill(self, room: GameRoom) -> str | None:
         """处理狼人投票结果，返回被杀玩家ID"""
         try:
             votes = room.vote_state.night_votes
@@ -277,7 +293,7 @@ class GameManager:
                 return None
 
             # 统计票数
-            vote_counts: Dict[str, int] = {}
+            vote_counts: dict[str, int] = {}
             for target_id in votes.values():
                 vote_counts[target_id] = vote_counts.get(target_id, 0) + 1
 
@@ -329,7 +345,7 @@ class GameManager:
 
     # ========== 白天流程 ==========
 
-    async def process_day_vote(self, room: GameRoom) -> Tuple[Optional[str], bool]:
+    async def process_day_vote(self, room: GameRoom) -> tuple[str | None, bool]:
         """
         处理白天投票结果
 
@@ -342,7 +358,7 @@ class GameManager:
                 return None, False
 
             # 统计票数（排除弃票）
-            vote_counts: Dict[str, int] = {}
+            vote_counts: dict[str, int] = {}
             for target_id in votes.values():
                 if target_id == "ABSTAIN":
                     continue  # 跳过弃票
@@ -362,7 +378,13 @@ class GameManager:
                 if not room.vote_state.is_pk_vote:
                     # 第一次投票平票，进入PK
                     try:
-                        targets.sort(key=lambda pid: room.get_player(pid).number if room.get_player(pid) else 999)
+                        targets.sort(
+                            key=lambda pid: (
+                                room.get_player(pid).number
+                                if room.get_player(pid)
+                                else 999
+                            )
+                        )
                         room.vote_state.pk_players = targets
                     except Exception as e:
                         logger.error(f"[狼人杀] 处理平票PK失败: {e}")

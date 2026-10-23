@@ -1,5 +1,7 @@
 """禁言管理服务"""
+
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 if TYPE_CHECKING:
@@ -18,9 +20,7 @@ class BanService:
         try:
             duration = 86400 * room.config.ban_duration_days
             await room.bot.set_group_ban(
-                group_id=int(room.group_id),
-                user_id=int(player_id),
-                duration=duration
+                group_id=int(room.group_id), user_id=int(player_id), duration=duration
             )
             room.banned_player_ids.add(player_id)
             logger.info(f"[狼人杀] 已禁言玩家 {player_id}")
@@ -37,9 +37,7 @@ class BanService:
 
         try:
             await room.bot.set_group_ban(
-                group_id=int(room.group_id),
-                user_id=int(player_id),
-                duration=0
+                group_id=int(room.group_id), user_id=int(player_id), duration=0
             )
             room.banned_player_ids.discard(player_id)
             logger.info(f"[狼人杀] 已解除禁言 {player_id}")
@@ -51,9 +49,11 @@ class BanService:
     @staticmethod
     async def unban_all_players(room: "GameRoom") -> None:
         """解除所有禁言"""
-        logger.info(f"[狼人杀] 开始解除所有玩家禁言，当前房间有 {len(room.players)} 个玩家")
+        logger.info(
+            f"[狼人杀] 开始解除所有玩家禁言，当前房间有 {len(room.players)} 个玩家"
+        )
         logger.info(f"[狼人杀] 当前被禁言的玩家列表: {room.banned_player_ids}")
-        
+
         # 遍历所有玩家，确保每个人都被解除禁言
         for player in room.players.values():
             # 跳过AI玩家
@@ -62,10 +62,10 @@ class BanService:
                 continue
             logger.info(f"[狼人杀] 尝试解除玩家 {player.id} 的禁言")
             await BanService.unban_player(room, player.id)
-        
+
         # 清空记录
         room.banned_player_ids.clear()
-        logger.info(f"[狼人杀] 解除所有玩家禁言完成")
+        logger.info("[狼人杀] 解除所有玩家禁言完成")
 
     @staticmethod
     async def set_group_whole_ban(room: "GameRoom", enable: bool) -> bool:
@@ -75,8 +75,7 @@ class BanService:
 
         try:
             await room.bot.set_group_whole_ban(
-                group_id=int(room.group_id),
-                enable=enable
+                group_id=int(room.group_id), enable=enable
             )
             logger.info(f"[狼人杀] 全员禁言状态: {enable}")
             return True
@@ -92,9 +91,7 @@ class BanService:
 
         try:
             await room.bot.set_group_admin(
-                group_id=int(room.group_id),
-                user_id=int(player_id),
-                enable=True
+                group_id=int(room.group_id), user_id=int(player_id), enable=True
             )
             room.temp_admin_ids.add(player_id)
             logger.info(f"[狼人杀] 已设置临时管理员 {player_id}")
@@ -111,9 +108,7 @@ class BanService:
 
         try:
             await room.bot.set_group_admin(
-                group_id=int(room.group_id),
-                user_id=int(player_id),
-                enable=False
+                group_id=int(room.group_id), user_id=int(player_id), enable=False
             )
             room.temp_admin_ids.discard(player_id)
             logger.info(f"[狼人杀] 已取消临时管理员 {player_id}")
@@ -137,9 +132,7 @@ class BanService:
 
         try:
             await room.bot.set_group_card(
-                group_id=int(room.group_id),
-                user_id=int(player_id),
-                card=card
+                group_id=int(room.group_id), user_id=int(player_id), card=card
             )
             logger.info(f"[狼人杀] 已将玩家 {player_id} 群昵称改为 {card}")
             return True

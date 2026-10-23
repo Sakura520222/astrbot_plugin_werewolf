@@ -1,13 +1,13 @@
 """阶段管理器"""
+
 import asyncio
 import random
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from ..models import GamePhase
-from ..roles import HunterDeathType
+from ..roles import HunterDeathType, HunterRole
 from ..services import BanService
-from ..roles import HunterRole
 
 if TYPE_CHECKING:
     from ..models import GameRoom
@@ -36,18 +36,21 @@ class PhaseManager:
 
         # 进入狼人阶段
         from .night_wolf import NightWolfPhase
+
         wolf_phase = NightWolfPhase(self.game_manager)
         await wolf_phase.on_enter(room)
 
     async def enter_seer_phase(self, room: "GameRoom") -> None:
         """进入预言家验人阶段"""
         from .night_seer import NightSeerPhase
+
         seer_phase = NightSeerPhase(self.game_manager)
         await seer_phase.on_enter(room)
 
     async def enter_witch_phase(self, room: "GameRoom") -> None:
         """进入女巫行动阶段"""
         from .night_witch import NightWitchPhase
+
         witch_phase = NightWitchPhase(self.game_manager)
         await witch_phase.on_enter(room)
 
@@ -56,24 +59,28 @@ class PhaseManager:
     async def enter_speaking_phase(self, room: "GameRoom") -> None:
         """进入发言阶段"""
         from .day_speaking import DaySpeakingPhase
+
         speaking_phase = DaySpeakingPhase(self.game_manager)
         await speaking_phase.on_enter(room)
 
     async def enter_vote_phase(self, room: "GameRoom") -> None:
         """进入投票阶段"""
         from .day_vote import DayVotePhase
+
         vote_phase = DayVotePhase(self.game_manager)
         await vote_phase.on_enter(room)
 
     async def enter_pk_vote_phase(self, room: "GameRoom") -> None:
         """进入PK投票阶段"""
         from .day_vote import DayVotePhase
+
         vote_phase = DayVotePhase(self.game_manager)
         await vote_phase.enter_pk_vote(room)
 
     async def enter_last_words_phase(self, room: "GameRoom") -> None:
         """进入遗言阶段"""
         from .last_words import LastWordsPhase
+
         last_words_phase = LastWordsPhase(self.game_manager)
         await last_words_phase.on_enter(room)
 
@@ -118,7 +125,11 @@ class PhaseManager:
 
                 # 清除状态
                 hunter_id = room.hunter_state.pending_shot_player_id
-                hunter_name = room.get_player(hunter_id).display_name if room.get_player(hunter_id) else "猎人"
+                hunter_name = (
+                    room.get_player(hunter_id).display_name
+                    if room.get_player(hunter_id)
+                    else "猎人"
+                )
                 room.hunter_state.pending_shot_player_id = None
                 room.hunter_state.has_shot = True
 
@@ -138,7 +149,9 @@ class PhaseManager:
         task = asyncio.create_task(hunter_timer())
         room.set_timer(task)
 
-    async def _handle_ai_hunter_shot(self, room: "GameRoom", hunter, death_type: str) -> None:
+    async def _handle_ai_hunter_shot(
+        self, room: "GameRoom", hunter, death_type: str
+    ) -> None:
         """处理AI猎人开枪"""
         ai_service = self.game_manager.ai_player_service
 
@@ -150,27 +163,39 @@ class PhaseManager:
 
         if target_number:
             target_player = room.get_player_by_number(target_number)
-            if target_player and target_player.is_alive and target_player.id != hunter.id:
+            if (
+                target_player
+                and target_player.is_alive
+                and target_player.id != hunter.id
+            ):
                 # 执行开枪
                 room.kill_player(target_player.id)
                 room.hunter_state.has_shot = True
                 room.hunter_state.pending_shot_player_id = None
 
                 # 记录日志
-                room.log(f"🔫 {hunter.display_name}（猎人AI）开枪带走 {target_player.display_name}")
-                logger.info(f"[狼人杀] AI猎人 {hunter.name} 开枪带走 {target_player.display_name}")
+                room.log(
+                    f"🔫 {hunter.display_name}（猎人AI）开枪带走 {target_player.display_name}"
+                )
+                logger.info(
+                    f"[狼人杀] AI猎人 {hunter.name} 开枪带走 {target_player.display_name}"
+                )
 
                 # 禁言被带走的玩家（跳过AI）
                 if not target_player.is_ai:
                     await BanService.ban_player(room, target_player.id)
 
                 # 通知群
-                await self.message_service.announce_hunter_shot(room, target_player.display_name)
+                await self.message_service.announce_hunter_shot(
+                    room, target_player.display_name
+                )
 
                 # 记录到AI上下文
                 for p in room.players.values():
                     if p.is_ai and p.ai_context:
-                        p.ai_context.add_event(f"猎人 {hunter.display_name} 开枪带走 {target_player.display_name}")
+                        p.ai_context.add_event(
+                            f"猎人 {hunter.display_name} 开枪带走 {target_player.display_name}"
+                        )
 
                 # 检查游戏是否结束
                 if await self.game_manager.check_and_handle_victory(room):
@@ -222,7 +247,9 @@ class PhaseManager:
         # 记录到AI上下文
         for p in room.players.values():
             if p.is_ai and p.ai_context:
-                p.ai_context.add_event(f"猎人 {hunter.display_name} 开枪带走 {target.display_name}")
+                p.ai_context.add_event(
+                    f"猎人 {hunter.display_name} 开枪带走 {target.display_name}"
+                )
 
         # 检查游戏是否结束
         if await self.game_manager.check_and_handle_victory(room):
@@ -243,12 +270,16 @@ class PhaseManager:
             return
 
         # 处理death_type可能是字符串或枚举的情况
-        is_vote_death = (death_type == HunterDeathType.VOTE or
-                        str(death_type) == "vote" or
-                        death_type == "vote")
-        is_wolf_death = (death_type == HunterDeathType.WOLF or
-                        str(death_type) == "wolf" or
-                        death_type == "wolf")
+        is_vote_death = (
+            death_type == HunterDeathType.VOTE
+            or str(death_type) == "vote"
+            or death_type == "vote"
+        )
+        is_wolf_death = (
+            death_type == HunterDeathType.WOLF
+            or str(death_type) == "wolf"
+            or death_type == "wolf"
+        )
 
         if is_vote_death:
             # 猎人被投票放逐，进入遗言

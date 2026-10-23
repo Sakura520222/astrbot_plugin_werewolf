@@ -1,12 +1,11 @@
 """上下文构建器 - 构建AI玩家的游戏上下文"""
+
 import re
 from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from ..prompts import (
-    PEACEFUL_NIGHT_TIPS,
-    DOUBLE_DEATH_TIPS
-)
+from ..prompts import DOUBLE_DEATH_TIPS, PEACEFUL_NIGHT_TIPS
 
 if TYPE_CHECKING:
     from ....models import GameRoom, Player
@@ -32,7 +31,7 @@ class ContextBuilder:
             "seer": "seer",
             "witch": "witch",
             "hunter": "hunter",
-            "villager": "villager"
+            "villager": "villager",
         }
         return role_map.get(player.role.value, "villager")
 
@@ -55,7 +54,7 @@ class ContextBuilder:
             if f"第{current_round}夜死亡" in event:
                 has_death_event = True
             if "救了" in event or "使用解药" in event:
-                match = re.search(r'救了\s*(\S+)', event)
+                match = re.search(r"救了\s*(\S+)", event)
                 if match:
                     saved_player_name = match.group(1)
 
@@ -73,18 +72,24 @@ class ContextBuilder:
             if player.ai_context.last_killed_player:
                 saved_player_name = player.ai_context.last_killed_player
             if saved_player_name:
-                return PEACEFUL_NIGHT_TIPS["witch"].format(saved_player=saved_player_name)
+                return PEACEFUL_NIGHT_TIPS["witch"].format(
+                    saved_player=saved_player_name
+                )
             return ""
 
         if role_key == "werewolf":
             for event in events[-10:]:
                 if "选择刀" in event or "击杀" in event:
-                    match = re.search(r'刀\s*(\S+)|击杀\s*(\S+)', event)
+                    match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)", event)
                     if match:
                         killed_target_name = match.group(1) or match.group(2)
             if killed_target_name:
-                return PEACEFUL_NIGHT_TIPS["werewolf"].format(killed_target=killed_target_name)
-            return PEACEFUL_NIGHT_TIPS["werewolf"].format(killed_target="某人（你们昨晚的目标）")
+                return PEACEFUL_NIGHT_TIPS["werewolf"].format(
+                    killed_target=killed_target_name
+                )
+            return PEACEFUL_NIGHT_TIPS["werewolf"].format(
+                killed_target="某人（你们昨晚的目标）"
+            )
 
         return PEACEFUL_NIGHT_TIPS["good"]
 
@@ -102,21 +107,25 @@ class ContextBuilder:
 
         for event in events[-10:]:
             if "死亡" in event and f"第{current_round}夜" in event:
-                death_match = re.search(r'死亡[：:]\s*(.+)', event)
+                death_match = re.search(r"死亡[：:]\s*(.+)", event)
                 if death_match:
                     dead_str = death_match.group(1)
-                    names = [n.strip() for n in dead_str.split(',') if n.strip()]
+                    names = [n.strip() for n in dead_str.split(",") if n.strip()]
                     for name in names:
                         if name and name not in dead_players:
                             dead_players.append(name)
 
             if "选择刀" in event or "击杀" in event or "狼人杀" in event:
-                match = re.search(r'刀\s*(\S+)|击杀\s*(\S+)|杀.*?(\d+号)', event)
+                match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)|杀.*?(\d+号)", event)
                 if match:
-                    wolf_killed_name = match.group(1) or match.group(2) or match.group(3)
+                    wolf_killed_name = (
+                        match.group(1) or match.group(2) or match.group(3)
+                    )
 
-            if "毒" in event and ("使用" in event or "毒了" in event or "毒死" in event):
-                match = re.search(r'毒.*?(\d+号\S*|\S+)', event)
+            if "毒" in event and (
+                "使用" in event or "毒了" in event or "毒死" in event
+            ):
+                match = re.search(r"毒.*?(\d+号\S*|\S+)", event)
                 if match:
                     witch_poisoned_name = match.group(1)
 
@@ -130,34 +139,41 @@ class ContextBuilder:
 
         if role_key == "witch":
             if witch_poisoned_name:
-                other_dead = dead_player_b if witch_poisoned_name in dead_player_a else dead_player_a
+                other_dead = (
+                    dead_player_b
+                    if witch_poisoned_name in dead_player_a
+                    else dead_player_a
+                )
                 return DOUBLE_DEATH_TIPS["witch"].format(
                     dead_player_a=dead_player_a,
                     dead_player_b=dead_player_b,
                     poisoned_player=witch_poisoned_name,
-                    other_dead=other_dead
+                    other_dead=other_dead,
                 )
             return ""
 
         if role_key == "werewolf":
             if wolf_killed_name:
-                witch_poisoned = dead_player_b if wolf_killed_name in dead_player_a else dead_player_a
+                witch_poisoned = (
+                    dead_player_b
+                    if wolf_killed_name in dead_player_a
+                    else dead_player_a
+                )
                 return DOUBLE_DEATH_TIPS["werewolf"].format(
                     dead_player_a=dead_player_a,
                     dead_player_b=dead_player_b,
                     wolf_killed=wolf_killed_name,
-                    witch_poisoned=witch_poisoned
+                    witch_poisoned=witch_poisoned,
                 )
             return DOUBLE_DEATH_TIPS["werewolf"].format(
                 dead_player_a=dead_player_a,
                 dead_player_b=dead_player_b,
                 wolf_killed="你们刀的那个",
-                witch_poisoned="另一个死者"
+                witch_poisoned="另一个死者",
             )
 
         return DOUBLE_DEATH_TIPS["good"].format(
-            dead_player_a=dead_player_a,
-            dead_player_b=dead_player_b
+            dead_player_a=dead_player_a, dead_player_b=dead_player_b
         )
 
     @staticmethod

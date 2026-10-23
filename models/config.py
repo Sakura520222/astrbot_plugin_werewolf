@@ -1,12 +1,14 @@
 """游戏配置"""
-from dataclasses import dataclass, field
-from typing import List
+
+from dataclasses import dataclass
+
 from .enums import Role
 
 
 @dataclass
 class GameConfig:
     """游戏配置"""
+
     # 玩家数量配置
     total_players: int = 9
     werewolf_count: int = 3
@@ -36,24 +38,24 @@ class GameConfig:
     ai_review_model: str = ""
     ai_review_prompt: str = ""
 
-    def get_roles_pool(self) -> List[Role]:
+    def get_roles_pool(self) -> list[Role]:
         """获取角色池"""
         return (
-            [Role.WEREWOLF] * self.werewolf_count +
-            [Role.SEER] * self.seer_count +
-            [Role.WITCH] * self.witch_count +
-            [Role.HUNTER] * self.hunter_count +
-            [Role.VILLAGER] * self.villager_count
+            [Role.WEREWOLF] * self.werewolf_count
+            + [Role.SEER] * self.seer_count
+            + [Role.WITCH] * self.witch_count
+            + [Role.HUNTER] * self.hunter_count
+            + [Role.VILLAGER] * self.villager_count
         )
 
     def validate(self) -> bool:
         """验证配置是否有效"""
         role_sum = (
-            self.werewolf_count +
-            self.seer_count +
-            self.witch_count +
-            self.hunter_count +
-            self.villager_count
+            self.werewolf_count
+            + self.seer_count
+            + self.witch_count
+            + self.hunter_count
+            + self.villager_count
         )
         return role_sum == self.total_players
 
@@ -66,11 +68,17 @@ class GameConfig:
         """获取角色配置描述"""
         god_roles = []
         if self.seer_count > 0:
-            god_roles.append(f"预言家×{self.seer_count}" if self.seer_count > 1 else "预言家")
+            god_roles.append(
+                f"预言家×{self.seer_count}" if self.seer_count > 1 else "预言家"
+            )
         if self.witch_count > 0:
-            god_roles.append(f"女巫×{self.witch_count}" if self.witch_count > 1 else "女巫")
+            god_roles.append(
+                f"女巫×{self.witch_count}" if self.witch_count > 1 else "女巫"
+            )
         if self.hunter_count > 0:
-            god_roles.append(f"猎人×{self.hunter_count}" if self.hunter_count > 1 else "猎人")
+            god_roles.append(
+                f"猎人×{self.hunter_count}" if self.hunter_count > 1 else "猎人"
+            )
         return " + ".join(god_roles)
 
     @classmethod

@@ -33,4 +33,4 @@
 
 from .service import AIPlayerService
 
-__all__ = ['AIPlayerService']
+__all__ = ["AIPlayerService"]

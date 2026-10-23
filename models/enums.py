@@ -1,9 +1,11 @@
 """游戏枚举定义"""
+
 from enum import Enum
 
 
 class GamePhase(Enum):
     """游戏阶段"""
+
     WAITING = "等待中"
     NIGHT_WOLF = "夜晚-狼人行动"
     NIGHT_SEER = "夜晚-预言家验人"
@@ -17,6 +19,7 @@ class GamePhase(Enum):
 
 class Role(Enum):
     """角色枚举"""
+
     WEREWOLF = "werewolf"
     SEER = "seer"
     WITCH = "witch"

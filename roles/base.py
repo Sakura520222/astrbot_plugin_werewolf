@@ -1,9 +1,10 @@
 """角色基类"""
+
 from abc import ABC, abstractmethod
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..models import Player, GameRoom, Role
+    from ..models import GameRoom, Player, Role
 
 
 class BaseRole(ABC):
@@ -45,11 +46,13 @@ class BaseRole(ABC):
         pass
 
     @abstractmethod
-    def get_night_commands(self) -> List[str]:
+    def get_night_commands(self) -> list[str]:
         """获取夜晚可用命令"""
         pass
 
-    def format_player_list(self, players: List["Player"], exclude_ids: Optional[List[str]] = None) -> str:
+    def format_player_list(
+        self, players: list["Player"], exclude_ids: list[str] | None = None
+    ) -> str:
         """格式化玩家列表"""
         exclude_ids = exclude_ids or []
         lines = []

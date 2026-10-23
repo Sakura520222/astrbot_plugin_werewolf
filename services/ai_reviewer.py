@@ -1,5 +1,7 @@
 """AI复盘服务"""
-from typing import Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 if TYPE_CHECKING:
@@ -30,17 +32,18 @@ class AIReviewer:
             game_data = self._format_game_data(room, winning_faction)
 
             # 构造prompt
-            system_prompt, user_prompt = self._build_prompts(room, game_data, winning_faction)
+            system_prompt, user_prompt = self._build_prompts(
+                room, game_data, winning_faction
+            )
 
             # 调用AI
             response = await provider.text_chat(
-                prompt=user_prompt,
-                system_prompt=system_prompt
+                prompt=user_prompt, system_prompt=system_prompt
             )
 
             if response.result_chain:
                 review_text = response.result_chain.get_plain_text()
-                return f"\n\n🤖 AI复盘\n{'='*30}\n{review_text}\n{'='*30}"
+                return f"\n\n🤖 AI复盘\n{'=' * 30}\n{review_text}\n{'=' * 30}"
             else:
                 return ""
 
@@ -53,13 +56,17 @@ class AIReviewer:
         if room.config.ai_review_model:
             provider = self.context.get_provider_by_id(room.config.ai_review_model)
             if not provider:
-                logger.warning(f"[狼人杀] 未找到名为 '{room.config.ai_review_model}' 的模型提供商，使用默认模型")
+                logger.warning(
+                    f"[狼人杀] 未找到名为 '{room.config.ai_review_model}' 的模型提供商，使用默认模型"
+                )
                 provider = self.context.get_using_provider()
         else:
             provider = self.context.get_using_provider()
         return provider
 
-    def _build_prompts(self, room: "GameRoom", game_data: str, winning_faction: str) -> tuple:
+    def _build_prompts(
+        self, room: "GameRoom", game_data: str, winning_faction: str
+    ) -> tuple:
         """构建AI提示词"""
         if room.config.ai_review_prompt:
             # 使用自定义提示词
@@ -116,7 +123,7 @@ class AIReviewer:
             Role.SEER: "预言家",
             Role.WITCH: "女巫",
             Role.HUNTER: "猎人",
-            Role.VILLAGER: "村民"
+            Role.VILLAGER: "村民",
         }
         for player in room.players.values():
             role_name = role_names.get(player.role, str(player.role))

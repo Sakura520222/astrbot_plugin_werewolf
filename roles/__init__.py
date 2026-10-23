@@ -1,11 +1,12 @@
 """角色层"""
+
 from .base import BaseRole
-from .werewolf import WerewolfRole
-from .seer import SeerRole
-from .witch import WitchRole, WitchState
-from .hunter import HunterRole, HunterState, HunterDeathType
-from .villager import VillagerRole
 from .factory import RoleFactory
+from .hunter import HunterDeathType, HunterRole, HunterState
+from .seer import SeerRole
+from .villager import VillagerRole
+from .werewolf import WerewolfRole
+from .witch import WitchRole, WitchState
 
 __all__ = [
     "BaseRole",

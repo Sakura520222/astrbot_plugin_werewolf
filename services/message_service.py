@@ -1,5 +1,7 @@
 """消息发送服务"""
-from typing import TYPE_CHECKING, Optional, List, Dict
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 from astrbot.core.message.message_event_result import MessageChain
 
@@ -26,7 +28,9 @@ class MessageService:
             logger.error(f"[狼人杀] 发送群消息失败: {e}")
             return False
 
-    async def send_group_at_message(self, room: "GameRoom", player: "Player", text: str) -> bool:
+    async def send_group_at_message(
+        self, room: "GameRoom", player: "Player", text: str
+    ) -> bool:
         """发送群消息并@某人"""
         if not room.msg_origin:
             return False
@@ -39,7 +43,9 @@ class MessageService:
             logger.error(f"[狼人杀] 发送群@消息失败: {e}")
             return False
 
-    async def send_private_message(self, room: "GameRoom", player_id: str, text: str) -> bool:
+    async def send_private_message(
+        self, room: "GameRoom", player_id: str, text: str
+    ) -> bool:
         """发送私聊消息"""
         if not room.bot:
             return False
@@ -57,7 +63,7 @@ class MessageService:
         player_id: str,
         role_name: str,
         player_number: int,
-        teammates: List[str] = None,
+        teammates: list[str] = None,
     ) -> bool:
         """发送角色信息给玩家（纯文本）"""
         from ..roles import RoleFactory
@@ -71,7 +77,9 @@ class MessageService:
 
         return await self.send_private_message(room, player_id, text)
 
-    async def broadcast_to_players(self, room: "GameRoom", player_ids: list, text: str) -> int:
+    async def broadcast_to_players(
+        self, room: "GameRoom", player_ids: list, text: str
+    ) -> int:
         """广播私聊消息给多个玩家"""
         success_count = 0
         for player_id in player_ids:
@@ -107,23 +115,22 @@ class MessageService:
     async def announce_seer_phase(self, room: "GameRoom") -> bool:
         """公告预言家验人阶段"""
         text = (
-            "🔮 狼人行动完成！\n"
-            "预言家请私聊机器人验人：/验人 编号\n"
-            "⏰ 剩余时间：2分钟"
+            "🔮 狼人行动完成！\n预言家请私聊机器人验人：/验人 编号\n⏰ 剩余时间：2分钟"
         )
         return await self.send_group_message(room, text)
 
     async def announce_witch_phase(self, room: "GameRoom") -> bool:
         """公告女巫行动阶段"""
-        text = (
-            "💊 预言家验人完成！\n"
-            "女巫请私聊机器人行动\n"
-            "⏰ 剩余时间：2分钟"
-        )
+        text = "💊 预言家验人完成！\n女巫请私聊机器人行动\n⏰ 剩余时间：2分钟"
         return await self.send_group_message(room, text)
 
-    async def announce_dawn(self, room: "GameRoom", killed_name: Optional[str] = None,
-                            saved: bool = False, poisoned_name: Optional[str] = None) -> bool:
+    async def announce_dawn(
+        self,
+        room: "GameRoom",
+        killed_name: str | None = None,
+        saved: bool = False,
+        poisoned_name: str | None = None,
+    ) -> bool:
         """公告天亮"""
         if saved:
             text = (
@@ -163,10 +170,10 @@ class MessageService:
     async def announce_pk_start(self, room: "GameRoom", pk_names: list) -> bool:
         """公告PK发言开始"""
         text = (
-            f"\n📊 投票结果公布！\n\n"
-            f"⚠️ 出现平票！以下玩家票数相同：\n"
+            "\n📊 投票结果公布！\n\n"
+            "⚠️ 出现平票！以下玩家票数相同：\n"
             + "\n".join([f"  • {name}" for name in pk_names])
-            + f"\n\n进入PK环节！\n平票玩家将依次发言（每人2分钟），然后进行二次投票。\n"
+            + "\n\n进入PK环节！\n平票玩家将依次发言（每人2分钟），然后进行二次投票。\n"
         )
         return await self.send_group_message(room, text)
 
@@ -181,12 +188,13 @@ class MessageService:
         )
         return await self.send_group_message(room, text)
 
-    async def announce_exile(self, room: "GameRoom", player_name: str, is_pk: bool = False) -> bool:
+    async def announce_exile(
+        self, room: "GameRoom", player_name: str, is_pk: bool = False
+    ) -> bool:
         """公告放逐结果"""
         prefix = "\n📊 PK投票结果公布！\n\n" if is_pk else "\n📊 投票结果公布！\n\n"
         text = (
-            prefix +
-            f"玩家 {player_name} 被放逐了！\n\n"
+            prefix + f"玩家 {player_name} 被放逐了！\n\n"
             f"存活玩家：{room.alive_count}/{room.player_count}\n"
         )
         return await self.send_group_message(room, text)
@@ -194,9 +202,9 @@ class MessageService:
     async def announce_vote_result(
         self,
         room: "GameRoom",
-        vote_counts: Dict[str, int],
-        voters_map: Dict[str, List[str]],
-        exiled_name: Optional[str] = None,
+        vote_counts: dict[str, int],
+        voters_map: dict[str, list[str]],
+        exiled_name: str | None = None,
         is_pk: bool = False,
     ) -> bool:
         """公告投票结果（纯文本）"""
@@ -211,7 +219,9 @@ class MessageService:
             if target:
                 voter_names = voters_map.get(target_id, [])
                 voters_str = "、".join(voter_names) if voter_names else "无"
-                text += f"• {target.display_name}: {vote_count}票 (投票者: {voters_str})\n"
+                text += (
+                    f"• {target.display_name}: {vote_count}票 (投票者: {voters_str})\n"
+                )
 
         if exiled_name:
             text += f"\n🔨 {exiled_name} 被放逐了！"
@@ -220,7 +230,9 @@ class MessageService:
 
         return await self.send_group_message(room, text)
 
-    async def announce_hunter_can_shoot(self, room: "GameRoom", hunter_name: str) -> bool:
+    async def announce_hunter_can_shoot(
+        self, room: "GameRoom", hunter_name: str
+    ) -> bool:
         """公告猎人可以开枪"""
         text = f"⚠️ {hunter_name} 是猎人，可以选择开枪带走一个人..."
         return await self.send_group_message(room, text)
@@ -228,12 +240,13 @@ class MessageService:
     async def announce_hunter_shot(self, room: "GameRoom", target_name: str) -> bool:
         """公告猎人开枪结果"""
         text = (
-            f"💥 猎人开枪带走了 {target_name}！\n\n"
-            f"剩余存活玩家：{room.alive_count} 人"
+            f"💥 猎人开枪带走了 {target_name}！\n\n剩余存活玩家：{room.alive_count} 人"
         )
         return await self.send_group_message(room, text)
 
-    async def announce_victory(self, room: "GameRoom", victory_msg: str, roles_text: str) -> bool:
+    async def announce_victory(
+        self, room: "GameRoom", victory_msg: str, roles_text: str
+    ) -> bool:
         """公告胜利"""
         text = f"🎉 {victory_msg}\n游戏结束！\n\n{roles_text}"
         return await self.send_group_message(room, text)
@@ -243,7 +256,9 @@ class MessageService:
         text = f"⏰ {phase_name}超时！自动进入下一阶段。"
         return await self.send_group_message(room, text)
 
-    async def announce_vote_reminder(self, room: "GameRoom", voted: int, total: int) -> bool:
+    async def announce_vote_reminder(
+        self, room: "GameRoom", voted: int, total: int
+    ) -> bool:
         """公告投票提醒"""
         text = (
             f"⏰ 投票倒计时：还有30秒！\n\n"

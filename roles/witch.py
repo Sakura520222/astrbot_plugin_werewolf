@@ -1,20 +1,23 @@
 """女巫角色"""
+
 from dataclasses import dataclass
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from .base import BaseRole
 
 if TYPE_CHECKING:
-    from ..models import Player, GameRoom, Role
+    from ..models import GameRoom, Player, Role
 
 
 @dataclass
 class WitchState:
     """女巫状态"""
-    poison_used: bool = False        # 毒药是否已使用
-    antidote_used: bool = False      # 解药是否已使用
-    saved_player_id: Optional[str] = None     # 本晚救的玩家ID
-    poisoned_player_id: Optional[str] = None  # 本晚毒的玩家ID
-    has_acted: bool = False          # 是否已行动
+
+    poison_used: bool = False  # 毒药是否已使用
+    antidote_used: bool = False  # 解药是否已使用
+    saved_player_id: str | None = None  # 本晚救的玩家ID
+    poisoned_player_id: str | None = None  # 本晚毒的玩家ID
+    has_acted: bool = False  # 是否已行动
 
     def reset_night(self) -> None:
         """重置每晚状态"""
@@ -37,6 +40,7 @@ class WitchRole(BaseRole):
     @property
     def role_type(self) -> "Role":
         from ..models import Role
+
         return Role.WITCH
 
     @property
@@ -74,7 +78,7 @@ class WitchRole(BaseRole):
             f"  /不操作 - 不使用任何药"
         )
 
-    def get_night_commands(self) -> List[str]:
+    def get_night_commands(self) -> list[str]:
         return ["/救人", "/毒人 编号", "/不操作"]
 
     def get_action_prompt(self, room: "GameRoom") -> str:

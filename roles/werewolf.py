@@ -1,9 +1,11 @@
 """狼人角色"""
-from typing import List, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 from .base import BaseRole
 
 if TYPE_CHECKING:
-    from ..models import Player, GameRoom, Role
+    from ..models import GameRoom, Player, Role
 
 
 class WerewolfRole(BaseRole):
@@ -12,6 +14,7 @@ class WerewolfRole(BaseRole):
     @property
     def role_type(self) -> "Role":
         from ..models import Role
+
         return Role.WEREWOLF
 
     @property
@@ -57,5 +60,5 @@ class WerewolfRole(BaseRole):
             f"示例：/办掉 1"
         )
 
-    def get_night_commands(self) -> List[str]:
+    def get_night_commands(self) -> list[str]:
         return ["/办掉 编号", "/密谋 消息"]

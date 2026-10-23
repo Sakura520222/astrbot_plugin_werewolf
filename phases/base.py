@@ -1,7 +1,9 @@
 """阶段基类"""
+
+import asyncio
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
-import asyncio
+
 from astrbot.api import logger
 
 if TYPE_CHECKING:

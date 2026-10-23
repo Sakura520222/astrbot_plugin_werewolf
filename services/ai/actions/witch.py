@@ -1,15 +1,13 @@
 """女巫行动 - 用药决策"""
-from typing import Optional, Tuple, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
-from .base import BaseAction
-from ..validators import TargetValidator
 from ..context import ContextBuilder
-from ..prompts import (
-    ANTI_HALLUCINATION_PROTOCOL,
-    ROLE_SOUL_SETTINGS,
-    ROLE_PROMPTS
-)
+from ..prompts import ANTI_HALLUCINATION_PROTOCOL, ROLE_PROMPTS, ROLE_SOUL_SETTINGS
+from ..validators import TargetValidator
+from .base import BaseAction
 
 if TYPE_CHECKING:
     from ....models import GameRoom, Player
@@ -24,8 +22,8 @@ class WitchAction(BaseAction):
         room: "GameRoom",
         can_save: bool,
         can_poison: bool,
-        killed_player_name: Optional[str] = None
-    ) -> Tuple[str, Optional[int]]:
+        killed_player_name: str | None = None,
+    ) -> tuple[str, int | None]:
         """AI女巫决定用药"""
         context = ContextBuilder.build_context(player, room)
         role_key = ContextBuilder.get_role_key(player)
@@ -33,7 +31,9 @@ class WitchAction(BaseAction):
 
         available_actions = []
         if killed_player_name and can_save:
-            available_actions.append(f"💊 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他")
+            available_actions.append(
+                f"💊 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他"
+            )
         if can_poison:
             available_actions.append("☠️ 你可以使用【毒药】毒死一个人")
         if not available_actions:
@@ -43,7 +43,7 @@ class WitchAction(BaseAction):
             anti_hallucination=ANTI_HALLUCINATION_PROTOCOL,
             soul_setting=soul_setting,
             context=context,
-            available_actions="\n".join(available_actions)
+            available_actions="\n".join(available_actions),
         )
 
         response = await self._call_llm(prompt, player)
@@ -55,9 +55,13 @@ class WitchAction(BaseAction):
                 target = self.extract_number(response)
                 if target:
                     # 验证毒药目标
-                    validated = TargetValidator.validate_poison_target(room, target, player)
+                    validated = TargetValidator.validate_poison_target(
+                        room, target, player
+                    )
                     if validated:
                         return ("poison", validated)
                     # 如果目标无效，不毒
-                    logger.warning(f"[狼人杀AI] 女巫 {player.name} 毒的目标 {target} 无效，取消操作")
+                    logger.warning(
+                        f"[狼人杀AI] 女巫 {player.name} 毒的目标 {target} 无效，取消操作"
+                    )
         return ("pass", None)

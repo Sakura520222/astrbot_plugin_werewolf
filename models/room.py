@@ -1,23 +1,28 @@
 """游戏房间数据模型"""
-from dataclasses import dataclass, field
-from typing import Dict, Set, List, Optional, Any, TYPE_CHECKING
+
 import asyncio
+from dataclasses import dataclass, field
 from threading import Lock
+from typing import TYPE_CHECKING, Any
+
+from .config import GameConfig
 from .enums import GamePhase, Role
 from .player import Player
-from .config import GameConfig
 
 if TYPE_CHECKING:
-    from ..roles import WitchState, HunterState
+    pass
 
 
 @dataclass
 class VoteState:
     """投票状态"""
-    night_votes: Dict[str, str] = field(default_factory=dict)  # 夜晚投票 {狼人ID: 目标ID}
-    day_votes: Dict[str, str] = field(default_factory=dict)    # 白天投票 {玩家ID: 目标ID}
-    pk_players: List[str] = field(default_factory=list)        # 平票PK玩家列表
-    is_pk_vote: bool = False                                    # 是否是PK投票
+
+    night_votes: dict[str, str] = field(
+        default_factory=dict
+    )  # 夜晚投票 {狼人ID: 目标ID}
+    day_votes: dict[str, str] = field(default_factory=dict)  # 白天投票 {玩家ID: 目标ID}
+    pk_players: list[str] = field(default_factory=list)  # 平票PK玩家列表
+    is_pk_vote: bool = False  # 是否是PK投票
 
     def clear_night_votes(self) -> None:
         """清空夜晚投票"""
@@ -33,10 +38,11 @@ class VoteState:
 @dataclass
 class SpeakingState:
     """发言状态"""
-    order: List[str] = field(default_factory=list)       # 发言顺序
-    current_index: int = 0                                # 当前发言者索引
-    current_speaker_id: Optional[str] = None              # 当前发言者ID
-    current_speech: List[str] = field(default_factory=list)  # 当前发言内容缓存
+
+    order: list[str] = field(default_factory=list)  # 发言顺序
+    current_index: int = 0  # 当前发言者索引
+    current_speaker_id: str | None = None  # 当前发言者ID
+    current_speech: list[str] = field(default_factory=list)  # 当前发言内容缓存
 
     def reset(self) -> None:
         """重置发言状态"""
@@ -49,36 +55,39 @@ class SpeakingState:
 @dataclass
 class GameRoom:
     """游戏房间"""
-    group_id: str                                        # 群ID
-    creator_id: str                                      # 房主ID
-    config: GameConfig                                   # 游戏配置
-    msg_origin: Any = None                               # 消息源（用于主动发送）
-    bot: Any = None                                      # Bot实例
+
+    group_id: str  # 群ID
+    creator_id: str  # 房主ID
+    config: GameConfig  # 游戏配置
+    msg_origin: Any = None  # 消息源（用于主动发送）
+    bot: Any = None  # Bot实例
 
     # 玩家管理
-    players: Dict[str, Player] = field(default_factory=dict)  # {玩家ID: Player}
-    number_to_player: Dict[int, str] = field(default_factory=dict)  # {编号: 玩家ID}
+    players: dict[str, Player] = field(default_factory=dict)  # {玩家ID: Player}
+    number_to_player: dict[int, str] = field(default_factory=dict)  # {编号: 玩家ID}
 
     # 游戏状态
     phase: GamePhase = GamePhase.WAITING
-    current_round: int = 0                               # 当前回合数
-    is_first_night: bool = True                          # 是否第一晚
+    current_round: int = 0  # 当前回合数
+    is_first_night: bool = True  # 是否第一晚
 
     # 夜晚状态
-    last_killed_id: Optional[str] = None                 # 上一晚被杀的玩家ID
-    seer_checked: bool = False                           # 预言家是否已验人
-    wolf_last_chat_time: Optional[float] = None          # 狼人最后密谋时间戳
-    wolf_ai_voted: bool = False                          # AI狼人是否已投票
-    wolf_ai_chatted: bool = False                        # AI狼人是否已密谋（防止重复）
-    wolf_ai_vote_task: Optional[asyncio.Task] = None     # AI投票定时器任务
-    wolf_ai_process_task: Optional[asyncio.Task] = None  # 全AI狼人处理任务
+    last_killed_id: str | None = None  # 上一晚被杀的玩家ID
+    seer_checked: bool = False  # 预言家是否已验人
+    wolf_last_chat_time: float | None = None  # 狼人最后密谋时间戳
+    wolf_ai_voted: bool = False  # AI狼人是否已投票
+    wolf_ai_chatted: bool = False  # AI狼人是否已密谋（防止重复）
+    wolf_ai_vote_task: asyncio.Task | None = None  # AI投票定时器任务
+    wolf_ai_process_task: asyncio.Task | None = None  # 全AI狼人处理任务
 
     # 白天投票状态
-    day_ai_voted: bool = False                           # AI白天是否已投票
-    vote_discussion: List[dict] = field(default_factory=list)  # 投票阶段讨论记录 [{player, content}, ...]
+    day_ai_voted: bool = False  # AI白天是否已投票
+    vote_discussion: list[dict] = field(
+        default_factory=list
+    )  # 投票阶段讨论记录 [{player, content}, ...]
 
     # 遗言状态
-    last_words_from_vote: bool = False                   # 遗言是否来自投票放逐
+    last_words_from_vote: bool = False  # 遗言是否来自投票放逐
 
     # 子状态
     witch_state: Any = None  # WitchState, 延迟初始化避免循环导入
@@ -87,21 +96,22 @@ class GameRoom:
     speaking_state: SpeakingState = field(default_factory=SpeakingState)
 
     # 管理状态
-    banned_player_ids: Set[str] = field(default_factory=set)   # 被禁言的玩家
-    temp_admin_ids: Set[str] = field(default_factory=set)      # 临时管理员
+    banned_player_ids: set[str] = field(default_factory=set)  # 被禁言的玩家
+    temp_admin_ids: set[str] = field(default_factory=set)  # 临时管理员
 
     # 定时器
-    timer_task: Optional[asyncio.Task] = None
+    timer_task: asyncio.Task | None = None
 
     # 游戏日志
-    game_log: List[str] = field(default_factory=list)
-    
+    game_log: list[str] = field(default_factory=list)
+
     # 并发控制
     _lock: Lock = field(default_factory=Lock, init=False)  # 用于保护共享状态的锁
 
     def __post_init__(self):
         """初始化角色状态（避免循环导入）"""
-        from ..roles import WitchState, HunterState
+        from ..roles import HunterState, WitchState
+
         if self.witch_state is None:
             self.witch_state = WitchState()
         if self.hunter_state is None:
@@ -114,36 +124,36 @@ class GameRoom:
         with self._lock:
             self.players[player.id] = player
 
-    def get_player(self, player_id: str) -> Optional[Player]:
+    def get_player(self, player_id: str) -> Player | None:
         """获取玩家"""
         return self.players.get(player_id)
 
-    def get_player_by_number(self, number: int) -> Optional[Player]:
+    def get_player_by_number(self, number: int) -> Player | None:
         """通过编号获取玩家"""
         player_id = self.number_to_player.get(number)
         return self.players.get(player_id) if player_id else None
 
-    def get_alive_players(self) -> List[Player]:
+    def get_alive_players(self) -> list[Player]:
         """获取所有存活玩家"""
         return [p for p in self.players.values() if p.is_alive]
 
-    def get_alive_player_ids(self) -> Set[str]:
+    def get_alive_player_ids(self) -> set[str]:
         """获取所有存活玩家ID"""
         return {p.id for p in self.players.values() if p.is_alive}
 
-    def get_players_by_role(self, role: Role) -> List[Player]:
+    def get_players_by_role(self, role: Role) -> list[Player]:
         """获取指定角色的所有玩家"""
         return [p for p in self.players.values() if p.role == role]
 
-    def get_alive_players_by_role(self, role: Role) -> List[Player]:
+    def get_alive_players_by_role(self, role: Role) -> list[Player]:
         """获取指定角色的存活玩家"""
         return [p for p in self.players.values() if p.role == role and p.is_alive]
 
-    def get_werewolves(self) -> List[Player]:
+    def get_werewolves(self) -> list[Player]:
         """获取所有狼人"""
         return self.get_players_by_role(Role.WEREWOLF)
 
-    def get_alive_werewolves(self) -> List[Player]:
+    def get_alive_werewolves(self) -> list[Player]:
         """获取存活狼人"""
         return self.get_alive_players_by_role(Role.WEREWOLF)
 
@@ -156,7 +166,7 @@ class GameRoom:
         player = self.get_player(player_id)
         return player.is_alive if player else False
 
-    def kill_player(self, player_id: str) -> Optional[Player]:
+    def kill_player(self, player_id: str) -> Player | None:
         """杀死玩家"""
         with self._lock:
             player = self.get_player(player_id)
@@ -181,17 +191,17 @@ class GameRoom:
 
     # ========== 角色查询方法 ==========
 
-    def get_seer(self) -> Optional[Player]:
+    def get_seer(self) -> Player | None:
         """获取预言家"""
         seers = self.get_players_by_role(Role.SEER)
         return seers[0] if seers else None
 
-    def get_witch(self) -> Optional[Player]:
+    def get_witch(self) -> Player | None:
         """获取女巫"""
         witches = self.get_players_by_role(Role.WITCH)
         return witches[0] if witches else None
 
-    def get_hunter(self) -> Optional[Player]:
+    def get_hunter(self) -> Player | None:
         """获取猎人"""
         hunters = self.get_players_by_role(Role.HUNTER)
         return hunters[0] if hunters else None
@@ -227,7 +237,7 @@ class GameRoom:
         return self.phase in (
             GamePhase.NIGHT_WOLF,
             GamePhase.NIGHT_SEER,
-            GamePhase.NIGHT_WITCH
+            GamePhase.NIGHT_WITCH,
         )
 
     def is_day_phase(self) -> bool:
@@ -236,7 +246,7 @@ class GameRoom:
             GamePhase.DAY_SPEAKING,
             GamePhase.DAY_VOTE,
             GamePhase.DAY_PK,
-            GamePhase.LAST_WORDS
+            GamePhase.LAST_WORDS,
         )
 
     # ========== 回合管理方法 ==========
@@ -262,14 +272,22 @@ class GameRoom:
         if self.timer_task and not self.timer_task.done():
             self.timer_task.cancel()
             self.timer_task = None
-        
+
         # 取消狼人AI投票任务
-        if hasattr(self, 'wolf_ai_vote_task') and self.wolf_ai_vote_task and not self.wolf_ai_vote_task.done():
+        if (
+            hasattr(self, "wolf_ai_vote_task")
+            and self.wolf_ai_vote_task
+            and not self.wolf_ai_vote_task.done()
+        ):
             self.wolf_ai_vote_task.cancel()
             self.wolf_ai_vote_task = None
-        
+
         # 取消全AI狼人处理任务
-        if hasattr(self, 'wolf_ai_process_task') and self.wolf_ai_process_task and not self.wolf_ai_process_task.done():
+        if (
+            hasattr(self, "wolf_ai_process_task")
+            and self.wolf_ai_process_task
+            and not self.wolf_ai_process_task.done()
+        ):
             self.wolf_ai_process_task.cancel()
             self.wolf_ai_process_task = None
 
@@ -296,7 +314,7 @@ class GameRoom:
 
     # ========== 目标解析方法 ==========
 
-    def parse_target(self, target_str: str) -> Optional[str]:
+    def parse_target(self, target_str: str) -> str | None:
         """解析目标玩家（支持编号或QQ号）"""
         # 尝试作为编号解析
         try:
