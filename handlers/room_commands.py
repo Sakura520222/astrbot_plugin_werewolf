@@ -1,20 +1,36 @@
 """房间管理命令"""
+
 import re
-from typing import TYPE_CHECKING, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
+
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
+from ..models import AIPlayerConfig, GamePhase
 from .base import BaseCommandHandler
-from ..models import GamePhase, AIPlayerConfig
 
 if TYPE_CHECKING:
-    from ..services import GameManager
+    pass
 
 
 class RoomCommandHandler(BaseCommandHandler):
     """房间管理命令处理器"""
 
     # AI玩家名称黑名单（避免与命令冲突）
-    AI_NAME_BLACKLIST = {"加入房间", "创建房间", "开始游戏", "结束游戏", "投票", "办掉", "验人", "救人", "毒人", "开枪", "房间"}
+    AI_NAME_BLACKLIST = {
+        "加入房间",
+        "创建房间",
+        "开始游戏",
+        "结束游戏",
+        "投票",
+        "办掉",
+        "验人",
+        "救人",
+        "毒人",
+        "开枪",
+        "房间",
+    }
 
     async def create_room(self, event: AstrMessageEvent) -> AsyncGenerator:
         """创建房间"""
@@ -29,11 +45,11 @@ class RoomCommandHandler(BaseCommandHandler):
                 return
 
             # 创建房间
-            room = self.game_manager.create_room(
+            self.game_manager.create_room(
                 group_id=group_id,
                 creator_id=event.get_sender_id(),
                 msg_origin=event.unified_msg_origin,
-                bot=event.bot
+                bot=event.bot,
             )
 
             config = self.game_manager.config
@@ -78,7 +94,9 @@ class RoomCommandHandler(BaseCommandHandler):
                 return
 
             if room.is_full:
-                yield event.plain_result(f"❌ 房间已满（{room.player_count}/{self.game_manager.config.total_players}）！")
+                yield event.plain_result(
+                    f"❌ 房间已满（{room.player_count}/{self.game_manager.config.total_players}）！"
+                )
                 return
 
             # 获取玩家昵称
@@ -140,6 +158,7 @@ class RoomCommandHandler(BaseCommandHandler):
 
             # 进入狼人行动阶段（会根据是否有人类狼人决定处理逻辑）
             from ..phases import NightWolfPhase
+
             wolf_phase = NightWolfPhase(self.game_manager)
             await wolf_phase.on_enter(room)
         except Exception as e:
@@ -187,13 +206,15 @@ class RoomCommandHandler(BaseCommandHandler):
             return
 
         if room.is_full:
-            yield event.plain_result(f"❌ 房间已满（{room.player_count}/{self.game_manager.config.total_players}）！")
+            yield event.plain_result(
+                f"❌ 房间已满（{room.player_count}/{self.game_manager.config.total_players}）！"
+            )
             return
 
         # 从消息中提取AI名称
         message_text = event.message_str.strip()
         # 匹配 /xxx加入 或 xxx加入 格式
-        match = re.match(r'^[/／]?(.+?)加入$', message_text)
+        match = re.match(r"^[/／]?(.+?)加入$", message_text)
         if not match:
             yield event.plain_result("❌ 无法识别AI名称！\n使用格式：/小咪加入")
             return
@@ -221,8 +242,7 @@ class RoomCommandHandler(BaseCommandHandler):
 
         # 创建AI玩家配置（使用全局配置的模型）
         ai_config = AIPlayerConfig(
-            name=ai_name,
-            model_id=self.game_manager.config.ai_player_model
+            name=ai_name, model_id=self.game_manager.config.ai_player_model
         )
 
         # 添加AI玩家
@@ -252,10 +272,10 @@ class RoomCommandHandler(BaseCommandHandler):
         # 获取要踢出的AI名称
         target_str = ""
         for seg in event.get_messages():
-            if hasattr(seg, 'text'):
+            if hasattr(seg, "text"):
                 # 提取命令后的参数
                 text = seg.text.strip()
-                match = re.match(r'^[/／]?踢出AI\s*(.*)$', text)
+                match = re.match(r"^[/／]?踢出AI\s*(.*)$", text)
                 if match:
                     target_str = match.group(1).strip()
                     break
@@ -312,7 +332,9 @@ class RoomCommandHandler(BaseCommandHandler):
             return
 
         if room.is_full:
-            yield event.plain_result(f"✅ 房间已满（{room.player_count}/{self.game_manager.config.total_players}），无需补位！")
+            yield event.plain_result(
+                f"✅ 房间已满（{room.player_count}/{self.game_manager.config.total_players}），无需补位！"
+            )
             return
 
         # 计算需要添加的AI玩家数量
@@ -324,16 +346,16 @@ class RoomCommandHandler(BaseCommandHandler):
             ai_name = f"AI{i + 1}"
             # 创建AI玩家配置
             ai_config = AIPlayerConfig(
-                name=ai_name,
-                model_id=self.game_manager.config.ai_player_model
+                name=ai_name, model_id=self.game_manager.config.ai_player_model
             )
             # 添加AI玩家
             ai_player = self.game_manager.add_ai_player(room, ai_name, ai_config)
             added_ai_names.append(ai_player.name)
 
         yield event.plain_result(
-            f"✅ AI补位成功！已添加 {needed_ai_count} 个AI玩家：\n\n" +
-            "\n".join([f"  • {name}" for name in added_ai_names]) + "\n\n" +
-            f"当前人数：{room.player_count}/{self.game_manager.config.total_players}\n\n" +
-            "👥 房间已满！房主可以使用 /开始游戏 开始游戏了！"
+            f"✅ AI补位成功！已添加 {needed_ai_count} 个AI玩家：\n\n"
+            + "\n".join([f"  • {name}" for name in added_ai_names])
+            + "\n\n"
+            + f"当前人数：{room.player_count}/{self.game_manager.config.total_players}\n\n"
+            + "👥 房间已满！房主可以使用 /开始游戏 开始游戏了！"
         )

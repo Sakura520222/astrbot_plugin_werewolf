@@ -1,12 +1,14 @@
 """AI玩家服务 - 处理AI玩家的游戏决策"""
+
 import asyncio
 import random
 import re
-from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from astrbot.api import logger
 
 if TYPE_CHECKING:
-    from ..models import GameRoom, Player, AIPlayerContext
+    from ..models import GameRoom, Player
 
 
 class AIPlayerService:
@@ -77,7 +79,7 @@ class AIPlayerService:
 - 会故意制造对立，让别人互相怀疑
 - 常用"你们俩对一下"、"我觉得他在针对你"、"有意思"
 - 示例风格："哎 2号你注意到没，3号一直在踩你诶，你俩是不是有仇啊？"
-"""
+""",
     }
 
     # ==================== 真人语言风格（所有发言必带） ====================
@@ -109,7 +111,6 @@ class AIPlayerService:
 - 表现得知道谁是狼
 - 用狼人视角说话（如"我们狼人"）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "seer": """【🔮 预言家 - 你的灵魂设定】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👁️ 你是场上视野最清晰的好人
@@ -128,7 +129,6 @@ class AIPlayerService:
 - 解释你的验人逻辑（为什么验这个人）
 - 如果死了，务必报出所有查验信息（警徽流）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "witch": """【🧪 女巫 - 你的灵魂设定】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💊 你手握生杀大权
@@ -148,7 +148,6 @@ class AIPlayerService:
 - "我救了XX" - 暴露解药使用
 - "我还有毒/没毒了" - 暴露女巫身份
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "hunter": """【🔫 猎人 - 你的灵魂设定】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💥 你是带着枪的村民
@@ -168,7 +167,6 @@ class AIPlayerService:
 - 被女巫毒死不能开枪
 - 没把握时可以选择不开枪
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "villager": """【👨‍🌾 平民 - 你的灵魂设定】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🌾 你是普通但重要的村民
@@ -188,7 +186,7 @@ class AIPlayerService:
 - 不要穿神职衣服（除非替神挡刀）
 - 投票给发言逻辑最混乱的人
 - 沉默的村民容易被当狼票，要敢说话
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
     }
 
     # ==================== 场景化阶段提示词模板 ====================
@@ -238,7 +236,6 @@ class AIPlayerService:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 请只回复一个数字（1-9的目标编号）：""",
-
         # 狼人夜间密谋
         "werewolf_chat": """【🐺 狼人密谋 - 只有队友能看到】
 
@@ -263,7 +260,6 @@ class AIPlayerService:
 {human_style}
 
 请简短发言（30字内），直接说：""",
-
         # 预言家验人
         "seer_check": """【🔮 预言家验人 - 选择验证目标】
 
@@ -299,7 +295,6 @@ class AIPlayerService:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 请只回复一个数字（1-9的目标编号）：""",
-
         # 女巫用药
         "witch_action": """【🧪 女巫行动 - 用药决策】
 
@@ -326,7 +321,6 @@ class AIPlayerService:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 请回复：救人 / 毒人 X号 / 不操作""",
-
         # 猎人开枪
         "hunter_shoot": """【🔫 猎人开枪 - 最后的决策】
 
@@ -355,7 +349,6 @@ class AIPlayerService:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 请回复：数字（1-9）或"不开枪"：""",
-
         # 白天发言
         "day_speech": """【☀️ 白天发言 - 轮到你了】
 
@@ -383,7 +376,6 @@ class AIPlayerService:
 {human_style}
 
 直接发言（不要加任何前缀）：""",
-
         # PK发言（平票后）
         "pk_speech": """【⚔️ PK发言 - 生死对决】
 
@@ -413,7 +405,6 @@ class AIPlayerService:
 {human_style}
 
 直接发言：""",
-
         # 白天投票
         "day_vote": """【🗳️ 投票阶段】
 
@@ -448,7 +439,6 @@ class AIPlayerService:
 示例：
 [发言]3号逻辑太混乱了
 [投票]3""",
-
         # 遗言
         "last_words": """【💀 遗言 - 最后的声音】
 
@@ -473,7 +463,7 @@ class AIPlayerService:
 
 {human_style}
 
-请发表遗言："""
+请发表遗言：""",
     }
 
     # ==================== 角色发言策略（详细版） ====================
@@ -513,7 +503,6 @@ class AIPlayerService:
 - 表现得像好人：积极分析、有立场、敢归票
 - 适当怀疑一个好人，引导票型
 - 不要和队友互保太明显""",
-
         "seer": """【🔮 预言家发言 - 取信于人】
 
 📢 跳身份时机：
@@ -533,7 +522,6 @@ class AIPlayerService:
 - 报出所有验人结果
 - 说明下一晚应该验谁
 - 把警徽传给你信任的人""",
-
         "witch": """【🧪 女巫发言 - 隐藏是保护】
 
 ⛔ 绝对红线（暴露身份的话）：
@@ -551,7 +539,6 @@ class AIPlayerService:
 - 预言家死了，场上缺主心骨
 - 你被当狼人要出局了
 - 局势需要你稳定""",
-
         "hunter": """【🔫 猎人发言 - 威慑与隐藏】
 
 🎭 身份策略：
@@ -567,7 +554,6 @@ class AIPlayerService:
 - 被冲票要出局时，跳身份反压
 - 对方是确定的狼，跳了威慑
 - 表现得强势一些："谁敢票我我就崩谁"（测试反应）""",
-
         "villager": """【👨‍🌾 村民发言 - 平凡但重要】
 
 💪 你的价值：
@@ -585,7 +571,7 @@ class AIPlayerService:
 - 不要太沉默，会被当狼票
 - 也不要太跳，会被狼刀
 - 有理有据表达观点
-- 敢于站队和归票"""
+- 敢于站队和归票""",
     }
 
     # ==================== 角色投票策略 ====================
@@ -604,7 +590,6 @@ class AIPlayerService:
 - 可以跟主流隐藏身份
 - 必要时可以票队友换信任（牺牲战术）
 - 发言要像好人：有逻辑、有立场""",
-
         "seer": """【🔮 预言家投票 - 坚定引导】
 
 🎯 投票优先级：
@@ -616,7 +601,6 @@ class AIPlayerService:
 - 你的投票很有引导作用，要坚定
 - 注意谁在做你的票（可能是狼同伙）
 - 保护好你的金水""",
-
         "witch": """【🧪 女巫投票 - 隐藏视角】
 
 🎯 投票思路：
@@ -627,7 +611,6 @@ class AIPlayerService:
 - 不要暴露女巫视角
 - 像普通村民一样投票
 - 保护好预言家和好人""",
-
         "hunter": """【🔫 猎人投票 - 独立判断】
 
 🎯 投票思路：
@@ -638,7 +621,6 @@ class AIPlayerService:
 - 考虑被投出去时开枪带谁
 - 可以通过投票表明立场
 - 被冲票时跳身份反压""",
-
         "villager": """【👨‍🌾 村民投票 - 跟对队友】
 
 🎯 投票思路：
@@ -648,7 +630,7 @@ class AIPlayerService:
 💡 注意：
 - 你的票很重要，不要轻易弃票
 - 注意拆解抱团投票（可能是狼）
-- 敢于表达立场"""
+- 敢于表达立场""",
     }
 
     # ==================== PK发言策略（生死对决） ====================
@@ -669,7 +651,6 @@ class AIPlayerService:
 3.【定狼对方】"他就是狼！刚才那个发言已经暴露了！"
 
 ⚠️ 千万不要慌，越慌越像狼""",
-
         "seer": """【🔮 预言家PK - 用查验说话】
 
 🎭 心态：愤怒、急切、不可置信
@@ -685,7 +666,6 @@ class AIPlayerService:
 2. 拆解对方的逻辑漏洞
 3. 指出投对手的人里一定有狼配合
 4. 气势要足，不能弱！""",
-
         "witch": """【🧪 女巫PK - 关键抉择】
 
 🎭 心态：冷静分析，必要时跳身份
@@ -698,7 +678,6 @@ class AIPlayerService:
 3.【攻击对手】指出对方发言的可疑之处
 
 ⚠️ 跳身份是最后手段，跳了就暴露了""",
-
         "hunter": """【🔫 猎人PK - 威慑反压】
 
 🎭 心态：强势、不怕死
@@ -714,7 +693,6 @@ class AIPlayerService:
 3.【表现委屈】"我一个猎人被你们这么冤枉"
 
 ⚠️ 跳了猎人后，狼人可能会让女巫毒你""",
-
         "villager": """【👨‍🌾 村民PK - 据理力争】
 
 🎭 心态：愤怒、委屈、不甘
@@ -728,7 +706,7 @@ class AIPlayerService:
 1. 强调你之前的发言和逻辑
 2. 攻击对手的可疑点
 3. 表现出好人被冤枉的委屈
-4. 争取场上同情票"""
+4. 争取场上同情票""",
     }
 
     # ==================== 遗言策略 ====================
@@ -742,7 +720,6 @@ class AIPlayerService:
 4.【沉默】不给任何信息
 
 ⚠️ 不要直接承认狼身份，也不要暴露队友""",
-
         "seer": """【🔮 预言家遗言 - 警徽流与信息传承】
 
 📢 你必须清晰地告诉好人以下信息：
@@ -761,7 +738,6 @@ class AIPlayerService:
 
 ⚠️ 警徽是你死后唯一的对话工具！
 千万不要把警徽留给未查验的人！""",
-
         "witch": """【🧪 女巫遗言 - 公开你的信息】
 
 你可以说：
@@ -771,7 +747,6 @@ class AIPlayerService:
 4. 谁最可疑
 
 帮助好人理清夜晚信息""",
-
         "hunter": """【🔫 猎人遗言 - 解释你的选择】
 
 说明：
@@ -779,7 +754,6 @@ class AIPlayerService:
 2. 你对场上局势的判断
 3. 谁最可疑
 4. 给剩下的好人建议""",
-
         "villager": """【👨‍🌾 村民遗言 - 留下你的判断】
 
 你应该：
@@ -788,7 +762,7 @@ class AIPlayerService:
 3. 帮助好人建立逻辑链
 4. 可以喊冤或表达不满
 
-让你的死有价值！"""
+让你的死有价值！""",
     }
 
     # ==================== 局势感知模板 ====================
@@ -808,7 +782,6 @@ class AIPlayerService:
 - 绑票！控场！不要再聊逻辑了
 - 可以说："狼人控场，交牌吧"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "wolf_disadvantage": """【🛡️ 战术指令：狼人劣势 - 孤狼作战！】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ 局势分析：队友大量出局，场上还有神职，非常危险！
@@ -818,7 +791,6 @@ class AIPlayerService:
 - 完全站边真预言家，祈祷能活到晚上
 - 活下去才有机会刀死神职翻盘
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "wolf_teammate_exposed": """【🚨 战术指令：队友被查杀！】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️ 紧急情况：队友被预言家点名查杀！
@@ -829,7 +801,6 @@ class AIPlayerService:
 
 选择取决于你的判断和胆量！
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "good_confused": """【😵 战术指令：好人迷茫局！】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 局势分析：预言家已死或存疑，没人带队，场上混乱
@@ -839,12 +810,10 @@ class AIPlayerService:
 - 让好人互打，你坐收渔翁之利
 - 可以假装在分析，实际在带节奏
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "normal": """【📋 战术指令：正常对局】
 保持冷静，按照正常策略行动。
 伪装好自己，配合队友，找机会推好人出局。
 """,
-
         # ==================== 绝境局战术（好人视角） ====================
         "good_desperate": """【🆘 绝境战术指令：好人孤注一掷！】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -864,7 +833,6 @@ class AIPlayerService:
 2. 煽动其他好人一起赌一把
 3. 用气势压制，不要再讲道理
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         # ==================== 绝境局战术（狼人视角） ====================
         "wolf_final_push": """【🏆 绝境战术指令：狼人稳住收割！】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -883,7 +851,7 @@ class AIPlayerService:
 "我也很想赢！我觉得Y号肯定是狼，出他游戏结束！"
 "大家冷静，别被带节奏了，我们再分析一下..."
 "如果我是狼，我早就被验出来了好吧"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
     }
 
     # ==================== 对跳辩论逻辑 ====================
@@ -906,7 +874,6 @@ class AIPlayerService:
 
 💪 气势要足！不能弱！
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         "observer": """【👀 对跳辩论 - 旁观站队】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 场上 {player_a} 和 {player_b} 对跳预言家，你需要站队！
@@ -928,7 +895,7 @@ class AIPlayerService:
 - 狼人发的金水往往会帮狼说话
 
 💬 站队话术："我站X号预言家，因为他的验人心路更合理，Y号的警徽流明显是狼人视角。"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
     }
 
     # ==================== 抿狼技巧 ====================
@@ -971,7 +938,7 @@ class AIPlayerService:
         "过度自证": "没人怀疑时主动自证，欲盖弥彰",
         "异常沉默": "在关键时刻选择沉默，可能在躲",
         "带节奏": "试图引导场上舆论，可能是真好人也可能是狼",
-        "捞人": "帮助某个玩家脱离嫌疑"
+        "捞人": "帮助某个玩家脱离嫌疑",
     }
 
     # ==================== 平安夜特殊事件提示词 ====================
@@ -998,7 +965,6 @@ class AIPlayerService:
 💬 示例发言：
 "平安夜！女巫干得漂亮！不知道这一刀落在谁头上了？"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         # 狼人阵营（知道刀了谁）
         "werewolf": """【🌙 特殊事件：平安夜（狼人视角）】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1021,7 +987,6 @@ class AIPlayerService:
 💬 示例发言（虚伪模式）：
 "平安夜？女巫手气不错。不过大家别盲目乐观，万一是自刀骗药呢？"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         # 女巫本人（知道自己救了谁）
         "witch": """【🌙 特殊事件：平安夜（女巫视角）】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1045,7 +1010,7 @@ class AIPlayerService:
 - 缺点：银水信息没有公开
 
 💡 建议：如果场上局势不紧张，可以先潜伏
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
     }
 
     # ==================== 双死特殊事件提示词 ====================
@@ -1072,7 +1037,6 @@ class AIPlayerService:
 💬 示例发言：
 "双死！女巫开毒了。我猜{dead_player_a}是被毒的，他昨天发言不太对；{dead_player_b}应该是被刀的好人。女巫快认领一下。"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         # 狼人阵营 - 知道自己刀了谁，能反推谁是被毒的
         "werewolf": """【💀💀 特殊事件：双死局面（狼人视角）】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1099,7 +1063,6 @@ class AIPlayerService:
 💬 示例发言：
 "双死？怎么回事？我不评价谁是被毒的，反正好人亏了。女巫这就把药用了？"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         # 女巫本人 - 最清楚真相，必须出来报毒杀
         "witch": """【💀💀 特殊事件：双死局面（女巫视角）】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1125,7 +1088,6 @@ class AIPlayerService:
 💬 示例发言：
 "我女巫。{poisoned_player}是我毒的，他昨天发言太假了。{other_dead}是被刀的，对不起没救你。"
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
-
         # 猎人死亡（双死之一）- 需要判断死因
         "hunter_dead": """【💀 特殊事件：你死了（猎人视角）】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1145,7 +1107,7 @@ class AIPlayerService:
 
 💬 被毒的遗言示例：
 "我是猎人，被女巫毒了！女巫你毒我干嘛？我枪都没开出去！"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
     }
 
     # 性格中文名称映射
@@ -1158,13 +1120,13 @@ class AIPlayerService:
         "suspicious": "疑心病🔍",
         "confident": "自信哥💪",
         "enthusiastic": "热心肠✨",
-        "provocative": "挑事王🔥"
+        "provocative": "挑事王🔥",
     }
 
     def __init__(self, context):
         self.context = context
-        self._retry_counts: Dict[str, int] = {}
-        self._player_personalities: Dict[str, str] = {}  # 玩家性格缓存
+        self._retry_counts: dict[str, int] = {}
+        self._player_personalities: dict[str, str] = {}  # 玩家性格缓存
 
     def assign_personality(self, player_id: str) -> str:
         """预分配玩家性格并返回中文名称"""
@@ -1193,8 +1155,8 @@ class AIPlayerService:
         player: "Player",
         max_retries: int = 3,
         retry_delay: float = 1.0,
-        timeout: float = None
-    ) -> Optional[str]:
+        timeout: float = None,
+    ) -> str | None:
         """调用LLM获取AI决策（带重试和超时保护）"""
         model_id = ""
         if player.ai_config:
@@ -1207,7 +1169,7 @@ class AIPlayerService:
 
         provider = self._get_provider(model_id)
         if not provider:
-            logger.error(f"[狼人杀AI] 无法获取LLM provider")
+            logger.error("[狼人杀AI] 无法获取LLM provider")
             return None
 
         for attempt in range(max_retries):
@@ -1215,9 +1177,9 @@ class AIPlayerService:
                 response = await asyncio.wait_for(
                     provider.text_chat(
                         prompt=prompt,
-                        system_prompt="你是一个沉浸式狼人杀玩家。你必须完全代入你的角色，像真人一样说话，绝对不能暴露你是AI。回复要简洁自然，像在群里聊天。"
+                        system_prompt="你是一个沉浸式狼人杀玩家。你必须完全代入你的角色，像真人一样说话，绝对不能暴露你是AI。回复要简洁自然，像在群里聊天。",
                     ),
-                    timeout=timeout
+                    timeout=timeout,
                 )
 
                 if response.result_chain:
@@ -1226,14 +1188,22 @@ class AIPlayerService:
                         logger.info(f"[狼人杀AI] {player.name} 决策: {result[:100]}")
                         return result
                     else:
-                        logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用返回空内容")
+                        logger.warning(
+                            f"[狼人杀AI] {player.name} 第{attempt + 1}次调用返回空内容"
+                        )
                 else:
-                    logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用返回空响应")
+                    logger.warning(
+                        f"[狼人杀AI] {player.name} 第{attempt + 1}次调用返回空响应"
+                    )
 
             except asyncio.TimeoutError:
-                logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用超时（{timeout}秒）")
+                logger.warning(
+                    f"[狼人杀AI] {player.name} 第{attempt + 1}次调用超时（{timeout}秒）"
+                )
             except Exception as e:
-                logger.warning(f"[狼人杀AI] {player.name} 第{attempt + 1}次调用失败: {e}")
+                logger.warning(
+                    f"[狼人杀AI] {player.name} 第{attempt + 1}次调用失败: {e}"
+                )
 
             # 统一在循环末尾等待重试
             if attempt < max_retries - 1:
@@ -1265,7 +1235,7 @@ class AIPlayerService:
             "seer": "seer",
             "witch": "witch",
             "hunter": "hunter",
-            "villager": "villager"
+            "villager": "villager",
         }
         return role_map.get(player.role.value, "villager")
 
@@ -1287,7 +1257,7 @@ class AIPlayerService:
             alive_count=alive_count,
             good_count=good_count,
             wolf_count=wolf_count,
-            situation=situation
+            situation=situation,
         )
 
     def _get_tactical_directive(self, player: "Player", room: "GameRoom") -> str:
@@ -1337,9 +1307,9 @@ class AIPlayerService:
             # 正常情况好人不需要特殊战术指令
             return ""
 
-    def _analyze_player_behaviors(self, room: "GameRoom") -> Dict[str, List[str]]:
+    def _analyze_player_behaviors(self, room: "GameRoom") -> dict[str, list[str]]:
         """分析所有玩家的行为并生成标签"""
-        player_tags: Dict[str, List[str]] = {}
+        player_tags: dict[str, list[str]] = {}
 
         for p in room.get_alive_players():
             tags = []
@@ -1347,18 +1317,28 @@ class AIPlayerService:
                 continue
 
             # 分析发言记录
-            speeches = p.ai_context.speeches if hasattr(p.ai_context, 'speeches') else []
-            player_speeches = [s for s in speeches if s.get('player') == p.display_name]
+            speeches = (
+                p.ai_context.speeches if hasattr(p.ai_context, "speeches") else []
+            )
+            player_speeches = [s for s in speeches if s.get("player") == p.display_name]
 
             # 检测划水（发言空洞）
             if player_speeches:
-                last_speech = player_speeches[-1].get('content', '') if player_speeches else ''
-                if len(last_speech) < 15 or any(kw in last_speech for kw in ['过了', '没想法', '听不出']):
+                last_speech = (
+                    player_speeches[-1].get("content", "") if player_speeches else ""
+                )
+                if len(last_speech) < 15 or any(
+                    kw in last_speech for kw in ["过了", "没想法", "听不出"]
+                ):
                     tags.append("划水")
 
             # 分析投票记录
-            votes = p.ai_context.vote_history if hasattr(p.ai_context, 'vote_history') else []
-            player_votes = [v for v in votes if v.get('voter') == p.display_name]
+            votes = (
+                p.ai_context.vote_history
+                if hasattr(p.ai_context, "vote_history")
+                else []
+            )
+            player_votes = [v for v in votes if v.get("voter") == p.display_name]
 
             # 检测跟票（投票与多数人一致）
             if len(player_votes) >= 2:
@@ -1387,34 +1367,43 @@ class AIPlayerService:
             votes = player.ai_context.vote_history
 
             # 该玩家的发言
-            p_speeches = [s for s in speeches if s.get('player') == p.display_name]
-            p_votes = [v for v in votes if v.get('voter') == p.display_name]
+            p_speeches = [s for s in speeches if s.get("player") == p.display_name]
+            p_votes = [v for v in votes if v.get("voter") == p.display_name]
 
             # 分析发言特征
             if p_speeches:
-                last_speech = p_speeches[-1].get('content', '')
+                last_speech = p_speeches[-1].get("content", "")
                 # 划水检测
-                if len(last_speech) < 20 or any(kw in last_speech for kw in ['过了', '没想法', '听不出', '不知道']):
+                if len(last_speech) < 20 or any(
+                    kw in last_speech for kw in ["过了", "没想法", "听不出", "不知道"]
+                ):
                     tags.append("划水")
                 # 情绪激动检测
-                if any(kw in last_speech for kw in ['！', '?!', '什么鬼', '搞笑']):
+                if any(kw in last_speech for kw in ["！", "?!", "什么鬼", "搞笑"]):
                     tags.append("情绪激动")
                 # 逻辑清晰检测
-                if any(kw in last_speech for kw in ['因为', '所以', '逻辑', '分析', '证据']):
+                if any(
+                    kw in last_speech for kw in ["因为", "所以", "逻辑", "分析", "证据"]
+                ):
                     tags.append("逻辑清晰")
                 # 试图保人检测
-                if any(kw in last_speech for kw in ['不一定是狼', '可能冤枉', '再看看', '先别投']):
+                if any(
+                    kw in last_speech
+                    for kw in ["不一定是狼", "可能冤枉", "再看看", "先别投"]
+                ):
                     tags.append("试图保人")
                 # 攻击预言家检测
-                if any(kw in last_speech for kw in ['假预言家', '悍跳', '不信', '骗子']):
+                if any(
+                    kw in last_speech for kw in ["假预言家", "悍跳", "不信", "骗子"]
+                ):
                     tags.append("攻击预言家")
 
             # 分析投票特征
             if p_votes:
                 # 言行不一检测（需要对比发言和投票）
-                last_vote = p_votes[-1].get('target', '') if p_votes else ''
+                last_vote = p_votes[-1].get("target", "") if p_votes else ""
                 if p_speeches and last_vote:
-                    last_speech = p_speeches[-1].get('content', '')
+                    last_speech = p_speeches[-1].get("content", "")
                     # 如果发言中提到某人好，但投了他
                     # 简化：如果嘴上和投票不一致
                     pass  # 复杂逻辑暂时跳过
@@ -1436,7 +1425,6 @@ class AIPlayerService:
             return ""
 
         events = player.ai_context.game_events
-        speeches = player.ai_context.speeches
 
         # 检测是否有对跳（两人跳预言家）
         seer_jumpers = []
@@ -1444,7 +1432,8 @@ class AIPlayerService:
             if "预言家" in event and ("跳" in event or "是预言家" in event):
                 # 尝试提取跳预言家的玩家
                 import re
-                match = re.search(r'(\d+号\S*|\S+).*?预言家', event)
+
+                match = re.search(r"(\d+号\S*|\S+).*?预言家", event)
                 if match:
                     jumper = match.group(1)
                     if jumper not in seer_jumpers:
@@ -1452,8 +1441,6 @@ class AIPlayerService:
 
         # 如果有两人对跳
         if len(seer_jumpers) >= 2:
-            role_key = self._get_role_key(player)
-
             # 如果玩家是对跳的当事人
             if player.display_name in seer_jumpers:
                 opponent = [j for j in seer_jumpers if j != player.display_name][0]
@@ -1461,8 +1448,7 @@ class AIPlayerService:
             else:
                 # 旁观者视角
                 return self.DUEL_DEBATE_TIPS["observer"].format(
-                    player_a=seer_jumpers[0],
-                    player_b=seer_jumpers[1]
+                    player_a=seer_jumpers[0], player_b=seer_jumpers[1]
                 )
 
         return ""
@@ -1492,13 +1478,16 @@ class AIPlayerService:
             if "救了" in event or "使用解药" in event:
                 # 尝试提取被救玩家名
                 import re
-                match = re.search(r'救了\s*(\S+)', event)
+
+                match = re.search(r"救了\s*(\S+)", event)
                 if match:
                     saved_player_name = match.group(1)
 
         # 防御性检查：如果同时存在平安夜和死亡事件，说明数据不一致（BUG）
         if is_peaceful_night and has_death_event:
-            logger.error(f"[BUG检测] 第{current_round}夜同时存在平安夜和死亡事件！以死亡事件为准。")
+            logger.error(
+                f"[BUG检测] 第{current_round}夜同时存在平安夜和死亡事件！以死亡事件为准。"
+            )
             return ""  # 不返回平安夜提示
 
         # 如果有死亡事件，说明不是平安夜
@@ -1526,7 +1515,8 @@ class AIPlayerService:
             for event in events[-10:]:
                 if "选择刀" in event or "击杀" in event:
                     import re
-                    match = re.search(r'刀\s*(\S+)|击杀\s*(\S+)', event)
+
+                    match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)", event)
                     if match:
                         killed_target_name = match.group(1) or match.group(2)
             if killed_target_name:
@@ -1551,7 +1541,9 @@ class AIPlayerService:
         witch_poisoned_name = None
         current_round = room.current_round
 
-        logger.info(f"[双死检查] 玩家={player.name}, current_round={current_round}, 事件数={len(events)}")
+        logger.info(
+            f"[双死检查] 玩家={player.name}, current_round={current_round}, 事件数={len(events)}"
+        )
 
         # 检查最近事件，寻找当前回合的双死相关信息
         for event in events[-10:]:
@@ -1560,12 +1552,13 @@ class AIPlayerService:
             if "死亡" in event and f"第{current_round}夜" in event:
                 logger.info(f"[双死检查] 找到死亡事件: {event}")
                 import re
+
                 # 优先匹配 "第X夜死亡：xxx, yyy" 格式
-                death_match = re.search(r'死亡[：:]\s*(.+)', event)
+                death_match = re.search(r"死亡[：:]\s*(.+)", event)
                 if death_match:
                     dead_str = death_match.group(1)
                     # 按逗号分割死者
-                    names = [n.strip() for n in dead_str.split(',') if n.strip()]
+                    names = [n.strip() for n in dead_str.split(",") if n.strip()]
                     logger.info(f"[双死检查] 解析到的死者: {names}")
                     for name in names:
                         if name and name not in dead_players:
@@ -1574,14 +1567,20 @@ class AIPlayerService:
             # 狼人视角：提取刀人目标
             if "选择刀" in event or "击杀" in event or "狼人杀" in event:
                 import re
-                match = re.search(r'刀\s*(\S+)|击杀\s*(\S+)|杀.*?(\d+号)', event)
+
+                match = re.search(r"刀\s*(\S+)|击杀\s*(\S+)|杀.*?(\d+号)", event)
                 if match:
-                    wolf_killed_name = match.group(1) or match.group(2) or match.group(3)
+                    wolf_killed_name = (
+                        match.group(1) or match.group(2) or match.group(3)
+                    )
 
             # 女巫视角：提取毒人目标
-            if "毒" in event and ("使用" in event or "毒了" in event or "毒死" in event):
+            if "毒" in event and (
+                "使用" in event or "毒了" in event or "毒死" in event
+            ):
                 import re
-                match = re.search(r'毒.*?(\d+号\S*|\S+)', event)
+
+                match = re.search(r"毒.*?(\d+号\S*|\S+)", event)
                 if match:
                     witch_poisoned_name = match.group(1)
 
@@ -1589,7 +1588,7 @@ class AIPlayerService:
         # 注意：不能用累计的 dead_players 列表，那会把之前投票出局的人也算进去
         logger.info(f"[双死检查] dead_players={dead_players}, 长度={len(dead_players)}")
         if len(dead_players) < 2:
-            logger.info(f"[双死检查] 死者不足2人，返回空字符串")
+            logger.info("[双死检查] 死者不足2人，返回空字符串")
             return ""
 
         dead_player_a = dead_players[-2] if len(dead_players) >= 2 else dead_players[0]
@@ -1601,12 +1600,16 @@ class AIPlayerService:
         if role_key == "witch":
             # 女巫知道自己毒了谁
             if witch_poisoned_name:
-                other_dead = dead_player_b if witch_poisoned_name in dead_player_a else dead_player_a
+                other_dead = (
+                    dead_player_b
+                    if witch_poisoned_name in dead_player_a
+                    else dead_player_a
+                )
                 return self.DOUBLE_DEATH_TIPS["witch"].format(
                     dead_player_a=dead_player_a,
                     dead_player_b=dead_player_b,
                     poisoned_player=witch_poisoned_name,
-                    other_dead=other_dead
+                    other_dead=other_dead,
                 )
             return ""
 
@@ -1614,25 +1617,28 @@ class AIPlayerService:
         if role_key == "werewolf":
             if wolf_killed_name:
                 # 狼人知道自己刀了谁，另一个就是被毒的
-                witch_poisoned = dead_player_b if wolf_killed_name in dead_player_a else dead_player_a
+                witch_poisoned = (
+                    dead_player_b
+                    if wolf_killed_name in dead_player_a
+                    else dead_player_a
+                )
                 return self.DOUBLE_DEATH_TIPS["werewolf"].format(
                     dead_player_a=dead_player_a,
                     dead_player_b=dead_player_b,
                     wolf_killed=wolf_killed_name,
-                    witch_poisoned=witch_poisoned
+                    witch_poisoned=witch_poisoned,
                 )
             # 如果没找到刀人记录，返回通用狼人视角
             return self.DOUBLE_DEATH_TIPS["werewolf"].format(
                 dead_player_a=dead_player_a,
                 dead_player_b=dead_player_b,
                 wolf_killed="你们刀的那个",
-                witch_poisoned="另一个死者"
+                witch_poisoned="另一个死者",
             )
 
         # 好人视角（预言家、猎人、村民）
         return self.DOUBLE_DEATH_TIPS["good"].format(
-            dead_player_a=dead_player_a,
-            dead_player_b=dead_player_b
+            dead_player_a=dead_player_a, dead_player_b=dead_player_b
         )
 
     def _get_special_event_tip(self, player: "Player", room: "GameRoom") -> str:
@@ -1651,7 +1657,9 @@ class AIPlayerService:
 
     # ==================== 狼人行动 ====================
 
-    async def decide_werewolf_kill(self, player: "Player", room: "GameRoom") -> Optional[int]:
+    async def decide_werewolf_kill(
+        self, player: "Player", room: "GameRoom"
+    ) -> int | None:
         """AI狼人选择击杀目标"""
         context = self._build_context(player, room)
         role_key = self._get_role_key(player)
@@ -1662,25 +1670,26 @@ class AIPlayerService:
             anti_hallucination=self.ANTI_HALLUCINATION_PROTOCOL,
             soul_setting=soul_setting,
             context=context,
-            tactical_directive=tactical_directive
+            tactical_directive=tactical_directive,
         )
 
         response = await self._call_llm(prompt, player)
         if response:
-            numbers = re.findall(r'\d+', response)
+            numbers = re.findall(r"\d+", response)
             if numbers:
                 target = int(numbers[0])
                 if 1 <= target <= 9:
                     return target
         return None
 
-    async def decide_werewolf_chat(self, player: "Player", room: "GameRoom") -> Optional[str]:
+    async def decide_werewolf_chat(
+        self, player: "Player", room: "GameRoom"
+    ) -> str | None:
         """AI狼人生成密谋消息"""
         context = self._build_context(player, room)
 
         prompt = self.ROLE_PROMPTS["werewolf_chat"].format(
-            context=context,
-            human_style=self.HUMAN_STYLE_TIPS
+            context=context, human_style=self.HUMAN_STYLE_TIPS
         )
 
         response = await self._call_llm(prompt, player)
@@ -1690,7 +1699,7 @@ class AIPlayerService:
 
     # ==================== 预言家行动 ====================
 
-    async def decide_seer_check(self, player: "Player", room: "GameRoom") -> Optional[int]:
+    async def decide_seer_check(self, player: "Player", room: "GameRoom") -> int | None:
         """AI预言家选择验人目标"""
         context = self._build_context(player, room)
         role_key = self._get_role_key(player)
@@ -1699,12 +1708,12 @@ class AIPlayerService:
         prompt = self.ROLE_PROMPTS["seer_check"].format(
             anti_hallucination=self.ANTI_HALLUCINATION_PROTOCOL,
             soul_setting=soul_setting,
-            context=context
+            context=context,
         )
 
         response = await self._call_llm(prompt, player)
         if response:
-            numbers = re.findall(r'\d+', response)
+            numbers = re.findall(r"\d+", response)
             if numbers:
                 target = int(numbers[0])
                 if 1 <= target <= 9:
@@ -1719,8 +1728,8 @@ class AIPlayerService:
         room: "GameRoom",
         can_save: bool,
         can_poison: bool,
-        killed_player_name: Optional[str] = None
-    ) -> Tuple[str, Optional[int]]:
+        killed_player_name: str | None = None,
+    ) -> tuple[str, int | None]:
         """AI女巫决定用药"""
         context = self._build_context(player, room)
         role_key = self._get_role_key(player)
@@ -1728,7 +1737,9 @@ class AIPlayerService:
 
         available_actions = []
         if killed_player_name and can_save:
-            available_actions.append(f"💊 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他")
+            available_actions.append(
+                f"💊 今晚 {killed_player_name} 被狼人杀害，你可以使用【解药】救他"
+            )
         if can_poison:
             available_actions.append("☠️ 你可以使用【毒药】毒死一个人")
         if not available_actions:
@@ -1738,7 +1749,7 @@ class AIPlayerService:
             anti_hallucination=self.ANTI_HALLUCINATION_PROTOCOL,
             soul_setting=soul_setting,
             context=context,
-            available_actions="\n".join(available_actions)
+            available_actions="\n".join(available_actions),
         )
 
         response = await self._call_llm(prompt, player)
@@ -1747,14 +1758,16 @@ class AIPlayerService:
             if "救" in response_lower or "save" in response_lower:
                 return ("save", None)
             elif "毒" in response_lower or "poison" in response_lower:
-                numbers = re.findall(r'\d+', response)
+                numbers = re.findall(r"\d+", response)
                 if numbers:
                     return ("poison", int(numbers[0]))
         return ("pass", None)
 
     # ==================== 猎人行动 ====================
 
-    async def decide_hunter_shoot(self, player: "Player", room: "GameRoom") -> Optional[int]:
+    async def decide_hunter_shoot(
+        self, player: "Player", room: "GameRoom"
+    ) -> int | None:
         """AI猎人决定开枪目标"""
         context = self._build_context(player, room)
         role_key = self._get_role_key(player)
@@ -1763,14 +1776,14 @@ class AIPlayerService:
         prompt = self.ROLE_PROMPTS["hunter_shoot"].format(
             anti_hallucination=self.ANTI_HALLUCINATION_PROTOCOL,
             soul_setting=soul_setting,
-            context=context
+            context=context,
         )
 
         response = await self._call_llm(prompt, player)
         if response:
             if "不开枪" in response or "不开" in response:
                 return None
-            numbers = re.findall(r'\d+', response)
+            numbers = re.findall(r"\d+", response)
             if numbers:
                 target = int(numbers[0])
                 if 1 <= target <= 9:
@@ -1779,7 +1792,9 @@ class AIPlayerService:
 
     # ==================== 白天发言 ====================
 
-    async def generate_speech(self, player: "Player", room: "GameRoom", is_pk: bool = False) -> str:
+    async def generate_speech(
+        self, player: "Player", room: "GameRoom", is_pk: bool = False
+    ) -> str:
         """AI生成白天发言"""
         context = self._build_context(player, room)
         context += "\n" + self._get_situation_awareness(room)
@@ -1805,7 +1820,6 @@ class AIPlayerService:
             context += "\n" + behavior_analysis
 
         role_key = self._get_role_key(player)
-        role_name = player.role.display_name if player.role else "玩家"
         soul_setting = self.ROLE_SOUL_SETTINGS.get(role_key, "")
         personality = self._get_player_personality(player)
 
@@ -1817,7 +1831,7 @@ class AIPlayerService:
                 personality=personality,
                 context=context,
                 pk_tips=pk_tips,
-                human_style=self.HUMAN_STYLE_TIPS
+                human_style=self.HUMAN_STYLE_TIPS,
             )
         else:
             # 动态调整村民提示词：首日发言 vs 正常发言
@@ -1834,7 +1848,9 @@ class AIPlayerService:
 
 💡 记住：根据已有的发言内容发言，不要分析不存在的事情！"""
             else:
-                speech_tips = self.SPEECH_TIPS.get(role_key, self.SPEECH_TIPS["villager"])
+                speech_tips = self.SPEECH_TIPS.get(
+                    role_key, self.SPEECH_TIPS["villager"]
+                )
 
             prompt = self.ROLE_PROMPTS["day_speech"].format(
                 anti_hallucination=self.ANTI_HALLUCINATION_PROTOCOL,
@@ -1842,13 +1858,18 @@ class AIPlayerService:
                 personality=personality,
                 context=context,
                 speech_tips=speech_tips,
-                human_style=self.HUMAN_STYLE_TIPS
+                human_style=self.HUMAN_STYLE_TIPS,
             )
 
         response = await self._call_llm(prompt, player)
         if response:
             # 清理可能的前缀
-            response = re.sub(r'^[\[【]?(发言|说话|speech)[\]】]?[：:]\s*', '', response, flags=re.IGNORECASE)
+            response = re.sub(
+                r"^[\[【]?(发言|说话|speech)[\]】]?[：:]\s*",
+                "",
+                response,
+                flags=re.IGNORECASE,
+            )
             # 限制发言长度（300字符，避免刷屏但保持完整表达）
             return response[:300]
 
@@ -1862,7 +1883,13 @@ class AIPlayerService:
 
     # ==================== 投票 ====================
 
-    async def decide_vote(self, player: "Player", room: "GameRoom", is_pk: bool = False, pk_candidates: List[str] = None) -> Tuple[str, Optional[int]]:
+    async def decide_vote(
+        self,
+        player: "Player",
+        room: "GameRoom",
+        is_pk: bool = False,
+        pk_candidates: list[str] = None,
+    ) -> tuple[str, int | None]:
         """AI生成投票决策"""
         context = self._build_context(player, room)
         context += "\n" + self._get_situation_awareness(room)
@@ -1883,7 +1910,6 @@ class AIPlayerService:
             context += "\n" + behavior_analysis
 
         role_key = self._get_role_key(player)
-        role_name = player.role.display_name if player.role else "玩家"
         soul_setting = self.ROLE_SOUL_SETTINGS.get(role_key, "")
         vote_tips = self.VOTE_TIPS.get(role_key, self.VOTE_TIPS["villager"])
 
@@ -1892,7 +1918,7 @@ class AIPlayerService:
             soul_setting=soul_setting,
             context=context,
             vote_tips=vote_tips,
-            human_style=self.HUMAN_STYLE_TIPS
+            human_style=self.HUMAN_STYLE_TIPS,
         )
 
         response = await self._call_llm(prompt, player)
@@ -1902,12 +1928,14 @@ class AIPlayerService:
 
         if response:
             # 解析发言
-            speech_match = re.search(r'\[发言\]\s*(.+?)(?=\[投票\]|$)', response, re.DOTALL)
+            speech_match = re.search(
+                r"\[发言\]\s*(.+?)(?=\[投票\]|$)", response, re.DOTALL
+            )
             if speech_match:
                 speech = speech_match.group(1).strip()[:30]
 
             # 解析投票
-            vote_match = re.search(r'\[投票\]\s*(\d+|弃票)', response)
+            vote_match = re.search(r"\[投票\]\s*(\d+|弃票)", response)
             if vote_match:
                 vote_str = vote_match.group(1)
                 if vote_str != "弃票":
@@ -1920,7 +1948,7 @@ class AIPlayerService:
 
             # 如果没有找到格式化的内容，尝试直接提取
             if not speech and not vote_target:
-                numbers = re.findall(r'\d+', response)
+                numbers = re.findall(r"\d+", response)
                 if numbers:
                     vote_target = int(numbers[0])
                     if not (1 <= vote_target <= 9):
@@ -1937,20 +1965,26 @@ class AIPlayerService:
         role_key = self._get_role_key(player)
         role_name = player.role.display_name if player.role else "玩家"
 
-        last_words_tips = self.LAST_WORDS_TIPS.get(role_key, self.LAST_WORDS_TIPS["villager"])
+        last_words_tips = self.LAST_WORDS_TIPS.get(
+            role_key, self.LAST_WORDS_TIPS["villager"]
+        )
 
         # 预言家特殊处理：附加验人结果
         if role_key == "seer" and player.ai_context and player.ai_context.seer_results:
-            results = [f"{r['target']}是{'狼' if r['is_werewolf'] else '金水'}"
-                      for r in player.ai_context.seer_results]
-            last_words_tips += f"\n\n🔮 【重要】你的查验记录：{'; '.join(results)}\n务必全部公布出来！"
+            results = [
+                f"{r['target']}是{'狼' if r['is_werewolf'] else '金水'}"
+                for r in player.ai_context.seer_results
+            ]
+            last_words_tips += (
+                f"\n\n🔮 【重要】你的查验记录：{'; '.join(results)}\n务必全部公布出来！"
+            )
 
         prompt = self.ROLE_PROMPTS["last_words"].format(
             anti_hallucination=self.ANTI_HALLUCINATION_PROTOCOL,
             context=context,
             role_name=role_name,
             last_words_tips=last_words_tips,
-            human_style=self.HUMAN_STYLE_TIPS
+            human_style=self.HUMAN_STYLE_TIPS,
         )
 
         response = await self._call_llm(prompt, player)
@@ -1983,8 +2017,7 @@ class AIPlayerService:
         # 狼人：记录队友
         if ctx.is_werewolf:
             teammates = [
-                w.display_name for w in room.get_alive_werewolves()
-                if w.id != player.id
+                w.display_name for w in room.get_alive_werewolves() if w.id != player.id
             ]
             ctx.werewolf_teammates = teammates
 
@@ -2016,6 +2049,7 @@ class AIPlayerService:
     def _get_phase_description(self, room: "GameRoom") -> str:
         """获取当前阶段的人类可读描述"""
         from ..models import GamePhase
+
         phase = room.phase
         round_num = room.current_round
 

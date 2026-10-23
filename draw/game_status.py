@@ -1,37 +1,35 @@
 """游戏状态图片生成"""
-from typing import List, Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 from PIL import Image, ImageDraw
+
+from .gradient_utils import create_vertical_gradient
 from .styles import (
-    load_font,
-    COLOR_BACKGROUND_TOP,
+    COLOR_ALIVE,
     COLOR_BACKGROUND_BOT,
-    COLOR_TITLE,
-    COLOR_TEXT_LIGHT,
-    COLOR_TEXT_DIM,
+    COLOR_BACKGROUND_TOP,
+    COLOR_BLOOD_MOON,
     COLOR_CARD_BG,
     COLOR_CARD_BORDER,
-    COLOR_ALIVE,
-    COLOR_DEAD,
-    COLOR_NIGHT,
     COLOR_DAY,
-    COLOR_WEREWOLF,
-    COLOR_SEER,
-    COLOR_WITCH,
-    COLOR_HUNTER,
-    COLOR_VILLAGER,
-    COLOR_BLOOD_MOON,
+    COLOR_DEAD,
     COLOR_MOONLIGHT,
+    COLOR_NIGHT,
+    COLOR_TEXT_DIM,
+    COLOR_TEXT_LIGHT,
+    COLOR_TITLE,
+    load_font,
 )
-from .gradient_utils import create_vertical_gradient
 
 if TYPE_CHECKING:
-    from ..models import GameRoom, Player
+    pass
 
 
 def draw_game_status(
     phase: str,
     day_count: int,
-    players: List[dict],
+    players: list[dict],
     alive_count: int,
     total_count: int,
 ) -> Image.Image:
@@ -64,7 +62,9 @@ def draw_game_status(
     base_height = 180 + player_section_height + 60
 
     # 创建画布
-    image = create_vertical_gradient(width, base_height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT)
+    image = create_vertical_gradient(
+        width, base_height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT
+    )
     draw = ImageDraw.Draw(image, "RGBA")
 
     # 判断是白天还是夜晚
@@ -85,21 +85,33 @@ def draw_game_status(
     # 阶段信息
     y += 45
     phase_text = f"{phase_emoji} 第 {day_count} 天 · {phase}"
-    draw.text((width // 2, y), phase_text, fill=phase_color, font=subtitle_font, anchor="mm")
+    draw.text(
+        (width // 2, y), phase_text, fill=phase_color, font=subtitle_font, anchor="mm"
+    )
 
     # 存活统计
     y += 35
     alive_text = f"存活人数：{alive_count}/{total_count}"
-    draw.text((width // 2, y), alive_text, fill=COLOR_ALIVE, font=text_font, anchor="mm")
+    draw.text(
+        (width // 2, y), alive_text, fill=COLOR_ALIVE, font=text_font, anchor="mm"
+    )
 
     # 分割线
     y += 30
     line_margin = 50
-    draw.line([(line_margin, y), (width - line_margin, y)], fill=COLOR_CARD_BORDER, width=1)
+    draw.line(
+        [(line_margin, y), (width - line_margin, y)], fill=COLOR_CARD_BORDER, width=1
+    )
 
     # 玩家列表标题
     y += 20
-    draw.text((width // 2, y), "📋 玩家列表", fill=COLOR_MOONLIGHT, font=text_font, anchor="mm")
+    draw.text(
+        (width // 2, y),
+        "📋 玩家列表",
+        fill=COLOR_MOONLIGHT,
+        font=text_font,
+        anchor="mm",
+    )
 
     # 玩家卡片
     y += 25
@@ -144,7 +156,9 @@ def draw_game_status(
         # 玩家编号
         number = player.get("number", idx + 1)
         cx = (x0 + x1) // 2
-        draw.text((cx, y0 + 18), f"{number}号", fill=text_color, font=number_font, anchor="mm")
+        draw.text(
+            (cx, y0 + 18), f"{number}号", fill=text_color, font=number_font, anchor="mm"
+        )
 
         # 玩家名称（截断过长的名字）
         name = player.get("name", f"玩家{number}")
@@ -153,12 +167,20 @@ def draw_game_status(
         draw.text((cx, y0 + 42), name, fill=text_color, font=small_font, anchor="mm")
 
         # 状态标签
-        draw.text((cx, y0 + 58), status_text, fill=status_color, font=small_font, anchor="mm")
+        draw.text(
+            (cx, y0 + 58), status_text, fill=status_color, font=small_font, anchor="mm"
+        )
 
     # 底部提示
     footer_y = y + rows * (card_height + 10) + 25
     tip_text = "🎮 使用 /狼人杀帮助 查看完整命令"
-    draw.text((width // 2, footer_y), tip_text, fill=COLOR_TEXT_DIM, font=small_font, anchor="mm")
+    draw.text(
+        (width // 2, footer_y),
+        tip_text,
+        fill=COLOR_TEXT_DIM,
+        font=small_font,
+        anchor="mm",
+    )
 
     # 裁剪到实际高度
     final_height = footer_y + 25
@@ -168,8 +190,8 @@ def draw_game_status(
 
 
 def draw_vote_result(
-    vote_data: List[dict],
-    exiled_player: Optional[str] = None,
+    vote_data: list[dict],
+    exiled_player: str | None = None,
     is_pk: bool = False,
 ) -> Image.Image:
     """
@@ -195,7 +217,9 @@ def draw_vote_result(
     base_height = 120 + len(vote_data) * 55 + 80
 
     # 创建画布
-    image = create_vertical_gradient(width, base_height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT)
+    image = create_vertical_gradient(
+        width, base_height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT
+    )
     draw = ImageDraw.Draw(image, "RGBA")
 
     # 标题
@@ -218,7 +242,9 @@ def draw_vote_result(
         voters = item.get("voters", [])
 
         # 名称
-        draw.text((bar_margin, y), name, fill=COLOR_TEXT_LIGHT, font=text_font, anchor="lm")
+        draw.text(
+            (bar_margin, y), name, fill=COLOR_TEXT_LIGHT, font=text_font, anchor="lm"
+        )
 
         # 投票条
         bar_x = bar_margin + 80
@@ -261,7 +287,13 @@ def draw_vote_result(
             if len(voters) > 5:
                 voters_text += f" +{len(voters) - 5}"
             y += 20
-            draw.text((bar_x, y), voters_text, fill=COLOR_TEXT_DIM, font=small_font, anchor="lm")
+            draw.text(
+                (bar_x, y),
+                voters_text,
+                fill=COLOR_TEXT_DIM,
+                font=small_font,
+                anchor="lm",
+            )
 
         y += 35
 
@@ -274,7 +306,9 @@ def draw_vote_result(
         result_text = "⚖️ 平票，无人出局"
         result_color = COLOR_MOONLIGHT
 
-    draw.text((width // 2, y), result_text, fill=result_color, font=text_font, anchor="mm")
+    draw.text(
+        (width // 2, y), result_text, fill=result_color, font=text_font, anchor="mm"
+    )
 
     # 裁剪到实际高度
     final_height = y + 30
@@ -284,8 +318,8 @@ def draw_vote_result(
 
 
 def draw_night_result(
-    killed_player: Optional[str] = None,
-    poisoned_player: Optional[str] = None,
+    killed_player: str | None = None,
+    poisoned_player: str | None = None,
     saved: bool = False,
 ) -> Image.Image:
     """
@@ -305,15 +339,18 @@ def draw_night_result(
     # 加载字体
     title_font = load_font(26)
     text_font = load_font(18)
-    emoji_font = load_font(40)
 
     # 创建画布
-    image = create_vertical_gradient(width, height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT)
+    image = create_vertical_gradient(
+        width, height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT
+    )
     draw = ImageDraw.Draw(image, "RGBA")
 
     # 标题
     y = 35
-    draw.text((width // 2, y), "🌅 天亮了", fill=COLOR_TITLE, font=title_font, anchor="mm")
+    draw.text(
+        (width // 2, y), "🌅 天亮了", fill=COLOR_TITLE, font=title_font, anchor="mm"
+    )
 
     # 结果
     y += 50
@@ -322,7 +359,13 @@ def draw_night_result(
     if killed_player and not saved:
         deaths.append(f"🐺 {killed_player} 被狼人袭击")
     elif killed_player and saved:
-        draw.text((width // 2, y), "💊 昨晚有人被救活了", fill=COLOR_ALIVE, font=text_font, anchor="mm")
+        draw.text(
+            (width // 2, y),
+            "💊 昨晚有人被救活了",
+            fill=COLOR_ALIVE,
+            font=text_font,
+            anchor="mm",
+        )
         y += 30
 
     if poisoned_player:
@@ -330,10 +373,22 @@ def draw_night_result(
 
     if deaths:
         for death in deaths:
-            draw.text((width // 2, y), death, fill=COLOR_BLOOD_MOON, font=text_font, anchor="mm")
+            draw.text(
+                (width // 2, y),
+                death,
+                fill=COLOR_BLOOD_MOON,
+                font=text_font,
+                anchor="mm",
+            )
             y += 30
     elif not killed_player:
-        draw.text((width // 2, y), "🌙 昨晚是平安夜，无人死亡", fill=COLOR_ALIVE, font=text_font, anchor="mm")
+        draw.text(
+            (width // 2, y),
+            "🌙 昨晚是平安夜，无人死亡",
+            fill=COLOR_ALIVE,
+            font=text_font,
+            anchor="mm",
+        )
 
     # 裁剪到实际高度
     final_height = y + 30

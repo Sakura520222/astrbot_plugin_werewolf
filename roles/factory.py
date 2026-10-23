@@ -1,21 +1,23 @@
 """角色工厂"""
-from typing import Dict, Type, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 from .base import BaseRole
-from .werewolf import WerewolfRole
-from .seer import SeerRole
-from .witch import WitchRole
 from .hunter import HunterRole
+from .seer import SeerRole
 from .villager import VillagerRole
+from .werewolf import WerewolfRole
+from .witch import WitchRole
 
 if TYPE_CHECKING:
-    from ..models import Role
+    from ..models import GameRoom, Player, Role
 
 
 class RoleFactory:
     """角色工厂"""
 
-    _role_classes: Dict["Role", Type[BaseRole]] = {}
-    _instances: Dict["Role", BaseRole] = {}
+    _role_classes: dict["Role", type[BaseRole]] = {}
+    _instances: dict["Role", BaseRole] = {}
 
     @classmethod
     def _init_role_classes(cls) -> None:
@@ -50,6 +52,5 @@ class RoleFactory:
     @classmethod
     def get_role_info(cls, role: "Role", player: "Player", room: "GameRoom") -> str:
         """获取角色信息文本"""
-        from ..models import Player, GameRoom
         role_instance = cls.get(role)
         return role_instance.get_role_info(player, room)

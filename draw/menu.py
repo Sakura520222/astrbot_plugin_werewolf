@@ -1,29 +1,28 @@
 """狼人杀菜单图片生成"""
+
 import math
+
 from PIL import Image, ImageDraw
+
+from .gradient_utils import create_vertical_gradient
 from .styles import (
-    load_font,
-    COLOR_BACKGROUND_TOP,
     COLOR_BACKGROUND_BOT,
-    COLOR_TITLE,
-    COLOR_SUBTITLE,
-    COLOR_CMD,
-    COLOR_CMD_NIGHT,
-    COLOR_CMD_DAY,
-    COLOR_TEXT_LIGHT,
-    COLOR_TEXT_DIM,
+    COLOR_BACKGROUND_TOP,
+    COLOR_BLOOD_MOON,
     COLOR_CARD_BG,
     COLOR_CARD_BORDER,
-    COLOR_LINE,
-    COLOR_BLOOD_MOON,
-    COLOR_MOONLIGHT,
-    COLOR_WEREWOLF,
-    COLOR_SEER,
-    COLOR_WITCH,
+    COLOR_CMD,
+    COLOR_CMD_DAY,
+    COLOR_CMD_NIGHT,
     COLOR_HUNTER,
-    COLOR_VILLAGER,
+    COLOR_MOONLIGHT,
+    COLOR_SEER,
+    COLOR_TEXT_DIM,
+    COLOR_TITLE,
+    COLOR_WEREWOLF,
+    COLOR_WITCH,
+    load_font,
 )
-from .gradient_utils import create_vertical_gradient
 
 
 def draw_menu_image(total_players: int = 9) -> Image.Image:
@@ -40,7 +39,6 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
 
     # 加载字体
     title_font = load_font(36)
-    subtitle_font = load_font(20)
     section_font = load_font(24)
     cmd_font = load_font(17)
     desc_font = load_font(14)
@@ -57,7 +55,12 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
         """绘制圆角卡片"""
         shadow_offset = 3
         draw.rounded_rectangle(
-            [x0 + shadow_offset, y0 + shadow_offset, x1 + shadow_offset, y1 + shadow_offset],
+            [
+                x0 + shadow_offset,
+                y0 + shadow_offset,
+                x1 + shadow_offset,
+                y1 + shadow_offset,
+            ],
             radius,
             fill=(0, 0, 0, 60),
         )
@@ -66,14 +69,28 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
             [x0, y0, x1, y1], radius, fill=COLOR_CARD_BG, outline=border_color, width=2
         )
 
-    def draw_section(draw, title, cmds, y_start, cols=3, cmd_color=COLOR_CMD, title_color=COLOR_MOONLIGHT):
+    def draw_section(
+        draw,
+        title,
+        cmds,
+        y_start,
+        cols=3,
+        cmd_color=COLOR_CMD,
+        title_color=COLOR_MOONLIGHT,
+    ):
         """绘制命令章节"""
         title_x = 50
-        draw.text((title_x, y_start), title, fill=title_color, font=section_font, anchor="lm")
+        draw.text(
+            (title_x, y_start), title, fill=title_color, font=section_font, anchor="lm"
+        )
         w, h = measure_text_size(title, section_font)
 
         underline_y = y_start + h // 2 + 8
-        draw.line([(title_x, underline_y), (title_x + w, underline_y)], fill=title_color, width=2)
+        draw.line(
+            [(title_x, underline_y), (title_x + w, underline_y)],
+            fill=title_color,
+            width=2,
+        )
 
         y = y_start + h // 2 + 25
         card_w = (width - 60) // cols
@@ -96,7 +113,11 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
             desc_lines = desc.split("\n") if "\n" in desc else [desc]
             for i, line in enumerate(desc_lines):
                 draw.text(
-                    (cx, y0 + 42 + i * 16), line, fill=COLOR_TEXT_DIM, font=desc_font, anchor="mt"
+                    (cx, y0 + 42 + i * 16),
+                    line,
+                    fill=COLOR_TEXT_DIM,
+                    font=desc_font,
+                    anchor="mt",
                 )
 
         rows = math.ceil(len(cmds) / cols)
@@ -145,7 +166,9 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
     final_height = footer_y_est + 60
 
     # 创建画布
-    image = create_vertical_gradient(width, final_height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT)
+    image = create_vertical_gradient(
+        width, final_height, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOT
+    )
     draw = ImageDraw.Draw(image, "RGBA")
 
     # 绘制标题
@@ -162,10 +185,22 @@ def draw_menu_image(total_players: int = 9) -> Image.Image:
     y0 = 90
     y0 = draw_section(draw, "📋 基础命令", basic_cmds, y0, cols=3, cmd_color=COLOR_CMD)
     y0 = draw_section(
-        draw, "🌙 夜晚命令（私聊机器人）", night_cmds, y0, cols=3, cmd_color=COLOR_CMD_NIGHT, title_color=COLOR_BLOOD_MOON
+        draw,
+        "🌙 夜晚命令（私聊机器人）",
+        night_cmds,
+        y0,
+        cols=3,
+        cmd_color=COLOR_CMD_NIGHT,
+        title_color=COLOR_BLOOD_MOON,
     )
     y0 = draw_section(
-        draw, "☀️ 白天命令（群聊）", day_cmds, y0, cols=3, cmd_color=COLOR_CMD_DAY, title_color=COLOR_MOONLIGHT
+        draw,
+        "☀️ 白天命令（群聊）",
+        day_cmds,
+        y0,
+        cols=3,
+        cmd_color=COLOR_CMD_DAY,
+        title_color=COLOR_MOONLIGHT,
     )
 
     # 游戏规则提示
