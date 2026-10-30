@@ -93,6 +93,19 @@ class PhaseManager:
             and room.current_round == round_number
         )
 
+    @staticmethod
+    def _record_public_event(room: "GameRoom", event: str) -> None:
+        """Mirror an announced hunter outcome into every AI observer's memory.
+
+        Args:
+            room: Room owning the public announcement.
+            event: Complete event visible to every player.
+        """
+        for observer in room.players.values():
+            if observer.is_ai and observer.ai_context:
+                observer.ai_context.current_round = room.current_round
+                observer.ai_context.add_event(event)
+
     async def wait_for_hunter_shot(self, room: "GameRoom", death_type) -> None:
         """Notify the hunter and wait without retaining an obsolete phase timer."""
         death_type = HunterDeathType(death_type)
@@ -110,12 +123,10 @@ class PhaseManager:
             or room.hunter_state.pending_shot_player_id != hunter_id
         ):
             return
-        for observer in room.players.values():
-            if observer.is_ai and observer.ai_context:
-                observer.ai_context.current_round = room.current_round
-                observer.ai_context.add_event(
-                    f"系统公布：{hunter.display_name} 是猎人，获得一次开枪机会（尚未行动）"
-                )
+        self._record_public_event(
+            room,
+            f"系统公布：{hunter.display_name} 是猎人，获得一次开枪机会（尚未行动）",
+        )
         if hunter.is_ai:
             await self._handle_ai_hunter_shot(room, hunter, death_type)
             return
@@ -141,6 +152,10 @@ class PhaseManager:
                 room.hunter_state.pending_shot_player_id = None
                 room.hunter_state.has_shot = True
                 room.log(f"🔫 {hunter.display_name}（猎人）超时未开枪")
+                self._record_public_event(
+                    room,
+                    f"系统公布：{hunter.display_name} 开枪超时，放弃开枪，开枪机会已结束",
+                )
                 await self.message_service.send_group_message(
                     room, f"⏰ {hunter.display_name} 开枪超时！放弃开枪机会。"
                 )
@@ -183,6 +198,9 @@ class PhaseManager:
         room.hunter_state.has_shot = True
         room.hunter_state.pending_shot_player_id = None
         room.log(f"🔫 {hunter.display_name}（猎人AI）选择不开枪")
+        self._record_public_event(
+            room, f"系统公布：{hunter.display_name} 选择不开枪，开枪机会已结束"
+        )
         await self.message_service.send_group_message(
             room, f"🔫 {hunter.display_name} 选择不开枪！"
         )
@@ -212,12 +230,9 @@ class PhaseManager:
         room.hunter_state.pending_shot_player_id = None
         room.kill_player(target_id)
         room.log(f"🔫 {hunter.display_name}（猎人）开枪带走 {target.display_name}")
-        for player in room.players.values():
-            if player.is_ai and player.ai_context:
-                player.ai_context.current_round = room.current_round
-                player.ai_context.add_event(
-                    f"猎人 {hunter.display_name} 开枪带走 {target.display_name}"
-                )
+        self._record_public_event(
+            room, f"猎人 {hunter.display_name} 开枪带走 {target.display_name}"
+        )
         await BanService.ban_player(room, target_id)
         if not self._is_current(room, phase, round_number):
             return

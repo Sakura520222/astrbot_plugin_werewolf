@@ -70,18 +70,24 @@ class ContextBuilder:
         return ctx
 
     @staticmethod
-    def build_context(player: "Player", room: "GameRoom") -> str:
+    def build_context(
+        player: "Player",
+        room: "GameRoom",
+        *,
+        extra_evidence_ids: list[str] | None = None,
+    ) -> str:
         """Render the current view, retaining all source records in memory.
 
         Args:
             player: Acting player.
             room: Current room.
+            extra_evidence_ids: Optional public S/D records to expand completely.
 
         Returns:
             Rules, identity, personality, public evidence, private facts and beliefs.
         """
         return ContextBuilder.refresh_context(player, room).to_prompt_context(
-            layered=True
+            layered=True, extra_evidence_ids=extra_evidence_ids
         )
 
     @staticmethod
@@ -150,6 +156,13 @@ class ContextBuilder:
         Returns:
             Multiple-death or peaceful-night guidance, if applicable.
         """
-        return ContextBuilder.get_double_death_tip(
+        tip = ContextBuilder.get_double_death_tip(
             player, room
         ) or ContextBuilder.get_peaceful_night_tip(player, room)
+        if not tip:
+            return ""
+        return (
+            "【特殊事件的内部核对】"
+            + tip
+            + "\n这些是reason中的信息边界，不是必须在speech复述的发言任务；前面已有人解释过时直接承接实际争议，没有新内容也可简短过。"
+        )

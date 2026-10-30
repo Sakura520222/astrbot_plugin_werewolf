@@ -20,6 +20,7 @@ class AIDecision:
     assessments: list[dict] = field(default_factory=list)
     legacy: bool = False
     belief_rejections: list[str] = field(default_factory=list)
+    request_evidence_ids: list[str] = field(default_factory=list)
 
     @classmethod
     def parse(cls, response: str, task: str) -> "AIDecision":
@@ -36,6 +37,9 @@ class AIDecision:
             ValueError: Missing, ambiguous or contradictory output fields.
         """
         text = response.strip()
+        bold_object = re.fullmatch(r"\*\*\s*(\{.*\})\s*\*\*", text, re.DOTALL)
+        if bold_object:
+            text = bold_object[1]
         if text.startswith("```"):
             match = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
             if not match:
@@ -55,6 +59,14 @@ class AIDecision:
             data = json.loads(text, object_pairs_hook=unique_keys)
             if not isinstance(data, dict):
                 raise ValueError("Expected one JSON object")
+            requested = data.get("request_evidence_ids", [])
+            if not isinstance(requested, list) or any(
+                not isinstance(item, str) for item in requested
+            ):
+                raise ValueError("request_evidence_ids must be a list of source IDs")
+            if requested:
+                # A read request never carries an executable action or belief update.
+                return cls(task, request_evidence_ids=list(dict.fromkeys(requested)))
             for name in ("intent", "reason", "speech", "change_reason"):
                 if name in data and not isinstance(data[name], str):
                     raise ValueError(f"{name} must be text")

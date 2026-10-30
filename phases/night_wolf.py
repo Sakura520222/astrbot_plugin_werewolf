@@ -219,6 +219,10 @@ class NightWolfPhase(BasePhase):
             if not chat_message:
                 continue
 
+            if wolf.ai_context:
+                wolf.ai_context.add_wolf_chat(
+                    wolf.display_name, chat_message, room.current_round, own=True
+                )
             # 记录日志
             room.log(f"💬 {wolf.display_name}（狼人AI）密谋：{chat_message}")
             logger.info(f"[狼人杀] AI狼人 {wolf.name} 密谋：{chat_message}")

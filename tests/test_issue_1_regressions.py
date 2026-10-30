@@ -875,7 +875,9 @@ class ContextAndParsingTests(PluginTestCase):
             text_chat=AsyncMock(
                 return_value=types.SimpleNamespace(
                     result_chain=types.SimpleNamespace(
-                        get_plain_text=lambda: "Complete review"
+                        get_plain_text=lambda: (
+                            '{"highlight_ids":["L2"],"advice_ids":[]}'
+                        )
                     )
                 )
             )
@@ -885,18 +887,23 @@ class ContextAndParsingTests(PluginTestCase):
         )
         self.room.config.enable_ai_review = True
         self.players[0].name = "Alice🐺"
-        long_log = "LOG_BEGIN" + "unabridged evidence " * 1200 + "LOG_END"
+        long_payload = "LOG_BEGIN" + "unabridged evidence " * 1200 + "LOG_END"
+        long_log = "🌙 狼人最终决定刀 " + long_payload
         self.room.game_log = ["🌙 Night started", long_log, "🗳️ Vote finished"]
         original_logs = list(self.room.game_log)
         for custom_prompt in ("", "🔮Custom analysis {winning_faction}\n{game_data}⚠️"):
             with self.subTest(custom=bool(custom_prompt)):
                 self.room.config.ai_review_prompt = custom_prompt
                 review = await reviewer.generate_review(self.room, "good")
-                self.assertIn("Complete review", review)
+                self.assertIn(long_log, review)
+                self.assertEqual(
+                    self.room.review_audit[-1]["response"],
+                    '{"highlight_ids":["L2"],"advice_ids":[]}',
+                )
                 prompts = provider.text_chat.await_args.kwargs
-                self.assertEqual(prompts["prompt"].count(long_log), 1)
+                self.assertEqual(prompts["prompt"].count(long_payload), 1)
                 if custom_prompt:
-                    self.assertEqual(prompts["system_prompt"].count(long_log), 1)
+                    self.assertEqual(prompts["system_prompt"].count(long_payload), 1)
                 for prompt in prompts.values():
                     self.assertNotRegex(prompt, r"[\U0001F000-\U0001FAFF☀-➿‍️]")
                 self.assertEqual(self.room.game_log, original_logs)

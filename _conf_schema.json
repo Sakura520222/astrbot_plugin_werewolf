@@ -52,7 +52,7 @@
     },
     "ai_review_prompt": {
         "description": "AI复盘自定义提示词",
-        "hint": "留空使用默认提示词。可以自定义AI复盘的风格、侧重点等。支持以下占位符：{winning_faction}=胜利阵营, {game_data}=游戏数据",
+        "hint": "留空使用默认提示词。可自定义复盘侧重点和展开记录数量；事实由真实结算与日志生成，模型只选择关键记录和建议。支持占位符：{winning_faction}=胜利阵营, {game_data}=游戏数据。自由正文不能覆盖事实选择协议。",
         "type": "string",
         "default": ""
     },
