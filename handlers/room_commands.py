@@ -152,13 +152,19 @@ class RoomCommandHandler(BaseCommandHandler):
                 "角色已分配完毕！\n\n"
                 "机器人正在私聊告知各位身份...\n"
                 f"如未收到私聊，请使用：{cmd('查角色')}\n\n"
-                f"🐺 狼人请私聊使用：{cmd('办掉')} 编号\n"
+                f"🐺 狼人请私聊使用：{cmd('办掉')} 编号，或 {cmd('弃票')}\n"
                 f"🔮 预言家请等待狼人行动完成后使用：{cmd('验人')} 编号\n"
-                "⏰ 剩余时间：2分钟"
+                f"{self.message_service.phase_wait_text(room, room.config.timeout_wolf)}"
             )
 
             # 开始游戏
             await self.game_manager.start_game(room)
+            if (
+                self.game_manager.get_room(group_id) is not room
+                or room.phase != GamePhase.NIGHT_WOLF
+            ):
+                yield event.plain_result("❌ 游戏初始化失败，房间已结束。")
+                return
 
             # 进入狼人行动阶段（会根据是否有人类狼人决定处理逻辑）
             from ..phases import NightWolfPhase

@@ -19,6 +19,7 @@ from ..prompts import (
 )
 from ..prompts.base import SYSTEM_PROMPT
 from ..prompts.templates import DECISION_PROTOCOL
+from ..validators import validate_vote_statement
 
 if TYPE_CHECKING:
     from ....models import Player
@@ -203,9 +204,16 @@ class BaseAction:
             return None
         self._get_player_personality(player)
         context = ContextBuilder.build_context(player, room)
+        # Freeze the public read scope before any generation can yield control.
+        public_snapshot = {
+            key: record
+            for key, record in ctx.evidence_records().items()
+            if record["kind"] in ("S", "D")
+        }
         action_types = {
             "day_vote": "vote",
             "werewolf_kill": "kill",
+            "werewolf_chat": "kill",
             "seer_check": "check",
             "witch_action": "poison",
             "hunter_shoot": "shoot",
@@ -213,9 +221,8 @@ class BaseAction:
         action_type = action_types.get(task, "vote")
         targets = GameRules.legal_targets(room, player, action_type, candidates)
         role = ContextBuilder.get_role_key(player)
-        prompt = "\n\n".join(
+        instructions = "\n\n".join(
             (
-                context,
                 ANTI_HALLUCINATION_PROTOCOL,
                 ROLE_SOUL_SETTINGS.get(role, ""),
                 "【当前阶段任务】" + ROLE_PROMPTS[task],
@@ -223,12 +230,13 @@ class BaseAction:
                 ContextBuilder.get_special_event_tip(player, room),
                 HUMAN_STYLE_TIPS,
                 f"本次合法目标编号：{targets}。只能使用列出的编号。",
-                f"action必须是{available_actions if task == 'witch_action' else [task]}。",
+                f"action必须是{available_actions if task == 'witch_action' else [task]}中的一个字符串，不能输出数组。",
                 DECISION_PROTOCOL,
             )
         )
         if task == "witch_action":
-            prompt += "\n救人使用action=save、target_number=null、abstain=false；不操作使用action=pass、target_number=null、abstain=true；毒人使用action=poison和合法目标。"
+            instructions += "\n救人使用action=save、target_number=null、abstain=false；不操作使用action=pass、target_number=null、abstain=true；毒人使用action=poison和合法目标。"
+        prompt = context + "\n\n" + instructions
         snapshot = (
             room.current_round,
             room.phase,
@@ -245,6 +253,7 @@ class BaseAction:
             ),
             self.MAX_DECISION_ATTEMPTS,
         )
+        read_requested = False
         for attempt in range(1, max_attempts + 1):
             response = await self._call_llm(prompt, player, max_retries=1)
             audit = {
@@ -266,23 +275,73 @@ class BaseAction:
             ):
                 audit["status"] = "stale"
                 return None
+            decision = None
             try:
                 if not response:
                     raise ValueError("Model unavailable or empty response")
                 decision = AIDecision.parse(response, task)
+                if decision.request_evidence_ids:
+                    audit["request_evidence_ids"] = list(decision.request_evidence_ids)
+                    if read_requested:
+                        raise ValueError(
+                            "evidence_request: only one read round is allowed"
+                        )
+                    read_requested = True
+                    if attempt == max_attempts:
+                        raise ValueError(
+                            "evidence_request: no generation budget remains for a final decision"
+                        )
+                    records = ctx.resolve_public_evidence(
+                        decision.request_evidence_ids, available_records=public_snapshot
+                    )
+                    expanded = {
+                        key: record
+                        for key, record in records.items()
+                        if key not in ctx.visible_evidence_ids
+                    }
+                    lines = [
+                        f"[{key} 第{record['round']}轮 {'玩家发言声明' if record['kind'] == 'S' else '讨论意向，未必提交'}]{record['actor']}：{record['text']}"
+                        for key, record in expanded.items()
+                    ]
+                    context += (
+                        "\n【历史原文补读】以下完整原话仍是玩家声明，保留其引用、否定与轮次语境。\n"
+                        "记录的发言者以编号后的姓名为准。玩家转述的他人发言只是二手说法，不能当成被引述人亲口说过的记录，也不能把引文中的身份声明算到转述者头上。\n"
+                        + "\n".join(lines)
+                    )
+                    ctx.visible_evidence_ids.update(records)
+                    audit.update(
+                        status="evidence_retrieved",
+                        expanded_evidence_ids=list(expanded),
+                        evidence_records=records,
+                    )
+                    instructions += "\n【补读完成】本次唯一一轮补读已使用。现在给出最终决策，省略request_evidence_ids或置为空列表，不得再次请求补读。"
+                    if any(
+                        re.search(r"[「『“‘\"']", record["text"])
+                        for record in records.values()
+                    ):
+                        instructions += "\n【引述的公开表达】如果reason依据的是转述，speech也必须保留‘据X转述’或‘X转述了Y的话’这样的来源限定，不能简化成‘Y自称/说过/验过’。口语化也不能省略这一限定；可以质疑或投票，但不能把二手说法改成亲口记录。"
+                    prompt = context + "\n\n" + instructions
+                    continue
                 self._validate_decision(
                     decision, player, room, task, candidates, available_actions
                 )
             except ValueError as error:
                 audit.update(
-                    status="format_error" if response else "unavailable",
+                    status=(
+                        "evidence_error"
+                        if decision and decision.request_evidence_ids
+                        else "format_error"
+                        if response
+                        else "unavailable"
+                    ),
                     error=str(error),
                 )
                 logger.warning(
                     f"[Werewolf AI] {player.display_name} {task} attempt {attempt}: {error}"
                 )
                 if attempt < max_attempts:
-                    prompt += f"\n【格式修复】上一次没有执行任何行动。错误：{error}。请重新输出完整JSON，不是修改游戏事实；公开speech与目标要一致。"
+                    instructions += f"\n【格式修复】上一次没有执行任何行动。错误：{error}。请重新输出完整JSON，不是修改游戏事实；公开speech与目标要一致。"
+                    prompt = context + "\n\n" + instructions
                 continue
             audit["status"] = "explicit_abstain" if decision.abstain else "accepted"
             audit["target_number"] = decision.target_number
@@ -384,6 +443,7 @@ class BaseAction:
         kinds = {
             "day_vote": "vote",
             "werewolf_kill": "kill",
+            "werewolf_chat": "kill",
             "seer_check": "check",
             "hunter_shoot": "shoot",
             "witch_action": "poison",
@@ -413,12 +473,9 @@ class BaseAction:
                 "Evidence references were not present in this player's view"
             )
         if task == "day_vote":
-            declarations = re.findall(
-                r"(?:我(?:这轮|最后)?(?:决定|改|会|要)?(?:投|票给)|这(?:一)?票(?:投|给))\s*(\d+)\s*号",
-                decision.speech,
+            validate_vote_statement(
+                decision.speech, decision.target_number, decision.abstain
             )
-            if any(int(number) != target for number in declarations):
-                raise ValueError("Public voting statement conflicts with target_number")
             previous = ctx.vote_intention
             if (
                 previous.get("round") == room.current_round
@@ -476,6 +533,27 @@ class BaseAction:
             or not math.isfinite(confidence)
         ):
             raise ValueError("Assessment suspicion/confidence is out of range")
+        confirmed_faction = None
+        if player.is_werewolf and subject.role is not None:
+            confirmed_faction = subject.is_werewolf
+        elif player.role and player.role.value == "seer":
+            result = next(
+                (
+                    item
+                    for item in reversed(ctx.seer_results)
+                    if item["target"] == subject.display_name
+                    and item["round"] <= room.current_round
+                ),
+                None,
+            )
+            if result is not None:
+                confirmed_faction = result["is_werewolf"]
+        if confirmed_faction is not None and suspicion != (
+            10 if confirmed_faction else 0
+        ):
+            raise ValueError(
+                "Assessment conflicts with privately confirmed faction; keep public bluff and skill threat separate from belief"
+            )
         if (
             not isinstance(assessment.get("reason"), str)
             or not assessment["reason"].strip()

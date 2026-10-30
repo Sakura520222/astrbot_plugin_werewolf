@@ -93,7 +93,9 @@ class RecoveryAndAbstentionTests(PluginTestCase):
                 text_chat=AsyncMock(
                     return_value=types.SimpleNamespace(
                         result_chain=types.SimpleNamespace(
-                            get_plain_text=lambda: "完整复盘"
+                            get_plain_text=lambda: (
+                                '{"highlight_ids":[],"advice_ids":[]}'
+                            )
                         )
                     )
                 )
@@ -101,8 +103,9 @@ class RecoveryAndAbstentionTests(PluginTestCase):
         )
         real_wait = asyncio.wait_for
         with patch("asyncio.wait_for", wraps=real_wait) as wait:
-            review = await reviewer.generate_review(self.room, "villager")
-        self.assertIn("完整复盘", review)
+            winner = self.plugin.services.VictoryChecker.check(self.room)[1]
+            review = await reviewer.generate_review(self.room, winner)
+        self.assertIn("AI复盘", review)
         self.assertEqual(wait.call_args.kwargs["timeout"], 180)
 
     async def test_serialized_wolf_workflow_survives_more_than_60_seconds(self):

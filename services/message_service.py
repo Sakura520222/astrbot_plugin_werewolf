@@ -96,6 +96,21 @@ class MessageService:
 
     # ========== 预设消息模板 ==========
 
+    @staticmethod
+    def phase_wait_text(room: "GameRoom", timeout_seconds: int) -> str:
+        """Describe the public room mode without exposing any hidden role.
+
+        Args:
+            room: Room whose public participant roster determines all-AI mode.
+            timeout_seconds: Configured human action window for the phase.
+
+        Returns:
+            An automatic-processing hint or the configured player time window.
+        """
+        if room.players and all(player.is_ai for player in room.players.values()):
+            return "🤖 全AI对局自动处理当前阶段，请等待。"
+        return f"⏰ 玩家行动时间：{timeout_seconds}秒"
+
     async def announce_game_start(self, room: "GameRoom") -> bool:
         """公告游戏开始"""
         text = (
@@ -105,7 +120,7 @@ class MessageService:
             f"如未收到私聊，请使用：{cmd('查角色')}\n\n"
             f"🐺 狼人请私聊使用：{cmd('办掉')} 编号，或 {cmd('弃票')}\n"
             f"🔮 预言家请等待狼人行动完成后使用：{cmd('验人')} 编号\n"
-            "⏰ 剩余时间：2分钟"
+            f"{self.phase_wait_text(room, room.config.timeout_wolf)}"
         )
         return await self.send_group_message(room, text)
 
@@ -115,7 +130,7 @@ class MessageService:
             "🌙 夜晚降临，天黑请闭眼...\n\n"
             f"🐺 狼人请私聊使用：{cmd('办掉')} 编号，或 {cmd('弃票')}\n"
             "🔮 预言家请等待狼人行动完成\n"
-            "⏰ 剩余时间：2分钟"
+            f"{self.phase_wait_text(room, room.config.timeout_wolf)}"
         )
         return await self.send_group_message(room, text)
 
@@ -124,13 +139,15 @@ class MessageService:
         text = (
             "🔮 狼人行动完成！\n"
             f"预言家请私聊机器人验人：{cmd('验人')} 编号\n"
-            "⏰ 剩余时间：2分钟"
+            f"{self.phase_wait_text(room, room.config.timeout_seer)}"
         )
         return await self.send_group_message(room, text)
 
     async def announce_witch_phase(self, room: "GameRoom") -> bool:
         """公告女巫行动阶段"""
-        text = "💊 预言家验人完成！\n女巫请私聊机器人行动\n⏰ 剩余时间：2分钟"
+        text = "💊 预言家验人完成！\n女巫请私聊机器人行动\n" + self.phase_wait_text(
+            room, room.config.timeout_witch
+        )
         return await self.send_group_message(room, text)
 
     async def announce_dawn(
@@ -177,7 +194,7 @@ class MessageService:
             f"{cmd('投票')} 编号，或 {cmd('弃票')}\n"
             "弃票计为已投票，不计入任何人的票数；全员弃票则无人出局。\n\n"
             f"当前存活人数：{room.alive_count}\n"
-            "⏰ 剩余时间：2分钟"
+            f"{self.phase_wait_text(room, room.config.timeout_vote)}"
         )
         return await self.send_group_message(room, text)
 
@@ -187,7 +204,8 @@ class MessageService:
             "\n📊 投票结果公布！\n\n"
             "⚠️ 出现平票！以下玩家票数相同：\n"
             + "\n".join([f"  • {name}" for name in pk_names])
-            + "\n\n进入PK环节！\n平票玩家将依次发言（每人2分钟），然后进行二次投票。\n"
+            + "\n\n进入PK环节！\n平票玩家将依次发言，然后进行二次投票。\n"
+            + self.phase_wait_text(room, room.config.timeout_speaking)
         )
         return await self.send_group_message(room, text)
 
@@ -197,7 +215,9 @@ class MessageService:
             "📢 PK发言完毕！现在开始二次投票\n\n"
             "⚠️ 只能投给以下平票玩家：\n"
             + "\n".join([f"  • {name}" for name in pk_names])
-            + "\n\n⏰ 投票时间：2分钟\n"
+            + "\n\n"
+            + self.phase_wait_text(room, room.config.timeout_vote)
+            + "\n"
             + f"💡 使用 {cmd('投票')} 编号，或 {cmd('弃票')}\n"
             + "弃票计为已投票；全员弃票或再次平票则无人出局。"
         )

@@ -1,5 +1,6 @@
 """统一验证器 - 确保AI操作的目标合法"""
 
+import re
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -8,6 +9,111 @@ from ...models.game_rules import GameRules
 
 if TYPE_CHECKING:
     from ...models import GameRoom, Player
+
+
+def validate_vote_statement(
+    speech: str, target_number: int | None, abstain: bool
+) -> None:
+    """Check clear current promises without deriving a ballot from prose.
+
+    Quoted material is masked only in a local analysis copy. Past, reported and
+    hypothetical clauses do not commit the speaker to a vote. Ambiguous wording
+    remains unclassified; the structured ballot is never changed.
+
+    Args:
+        speech: Complete public expression, retained unchanged by the caller.
+        target_number: Structured target, or None for abstention.
+        abstain: Whether the structured ballot explicitly abstains.
+
+    Raises:
+        ValueError: A definite current promise contradicts the structured ballot.
+    """
+    closing_quotes = {
+        "「": "」",
+        "『": "』",
+        "“": "”",
+        "‘": "’",
+        '"': '"',
+        "'": "'",
+        "`": "`",
+    }
+    stack = []
+    unquoted = []
+    for character in speech:
+        if stack and character == stack[-1]:
+            stack.pop()
+            unquoted.append(" ")
+        elif character in closing_quotes:
+            stack.append(closing_quotes[character])
+            unquoted.append(" ")
+        else:
+            unquoted.append(" " if stack else character)
+    text = re.sub(r"(?m)^\s*>[^\n]*", " ", "".join(unquoted))
+    current = r"(?:今天|今日|这(?:一)?轮|本轮|这次|现在|此刻|最后|最终)"
+    historical = r"(?:昨天|昨日|昨晚|前天|之前|此前|刚才|上(?:一)?轮|上次|原本|曾经)"
+    owner = r"(?:我(?:的?(?:这(?:一)?票|票)|把票)?|这(?:一)?票|我的票)"
+    prefix = rf"(?P<prefix>(?:(?:{current}|{owner})\s*){{0,3}})"
+    verb = rf"(?P<negative>不(?:会|再|要)?|没(?:有)?|绝不|并不)?(?:(?:就|先|会|要|将|决定|确定|还是|改|{current})\s*){{0,3}}"
+    ballot = r"(?:(?:投(?:给|向)?|票给)\s*(?P<target>\d+)\s*号|给\s*(?P<given>\d+)\s*号(?P<one_vote>一票)?|(?P<abstain>弃票))"
+    statement = re.compile(prefix + verb + ballot)
+    inherited_self = True
+    past_scope = False
+    uncertain_scope = False
+    for raw_clause in re.split(r"(?<=[。！？!?；;\n])|[，,]", text):
+        clause = raw_clause.strip()
+        if not clause:
+            continue
+        if re.match(r"^(?:但(?:是)?|不过|而是|实际上|最终)", clause):
+            uncertain_scope = False
+        clause = re.sub(
+            r"^(?:但(?:是)?|不过|所以|因此|那么|总之|而是|实际上)\s*", "", clause
+        )
+        explicit_self = bool(re.match(rf"(?:{current}\s*)?{owner}", clause))
+        current_anchor = bool(re.match(rf"(?:{owner}\s*)?{current}", clause))
+        if current_anchor:
+            past_scope = False
+        if re.match(rf"(?:我)?{historical}", clause):
+            past_scope = True
+        if re.match(
+            r"(?:我)?(?:如果|假如|要是|除非|万一|可能|也许|或许|考虑|倾向|还没决定)",
+            clause,
+        ):
+            uncertain_scope = True
+        match = statement.match(clause)
+        if match and re.match(
+            r"\s*(?:(?:或(?:者|是)?|还是)\s*(?:(?:投(?:给)?)?\d+\s*号|弃票)|的话|才怪)",
+            clause[match.end() :],
+        ):
+            uncertain_scope = True
+        if explicit_self:
+            inherited_self = True
+        elif not match:
+            inherited_self = bool(re.match(rf"{historical}(?:我)?(?:投|弃票)", clause))
+        if (
+            match
+            and (explicit_self or inherited_self)
+            and not (past_scope or uncertain_scope)
+            and not re.search(r"[？?]", clause)
+        ):
+            # "Give seat N a chance" is not an explicit voting commitment.
+            if match["given"] and "票" not in match["prefix"] and not match["one_vote"]:
+                continue
+            number_text = match["target"] or match["given"]
+            number = int(number_text) if number_text else None
+            negative = bool(match["negative"])
+            if match["abstain"]:
+                if (not negative and not abstain) or (negative and abstain):
+                    raise ValueError("vote_statement: abstention_conflict")
+            elif negative:
+                if not abstain and number == target_number:
+                    raise ValueError("vote_statement: excluded_target")
+            elif abstain:
+                raise ValueError("vote_statement: target_vs_abstention")
+            elif number != target_number:
+                raise ValueError("vote_statement: target_mismatch")
+        if re.search(r"[。！？!?；;\n]$", raw_clause):
+            inherited_self = True
+            past_scope = uncertain_scope = False
 
 
 class TargetValidator:

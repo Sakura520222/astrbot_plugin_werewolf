@@ -13,7 +13,8 @@ import json
 import random
 from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from test_issue_1_regressions import load_plugin
 
@@ -85,6 +86,33 @@ def create_scenario(
     if scenario == "first_night":
         room.phase = models.GamePhase.NIGHT_SEER
         return room, service, actor
+    if scenario in ("history_retraction", "history_clarification"):
+        room.current_round = 3
+        speaker = room.get_player_by_number(2).display_name
+        accuser = room.get_player_by_number(5).display_name
+        original = (
+            "我是预言家，第一夜查3号是好人。"
+            if scenario == "history_retraction"
+            else "我先把5号刚才的话复述一遍，免得大家只记得半句。他说：「我是预言家，第一夜查3号是好人。」这句话的说话人是5号，不是我。我在这里问的是他为什么选3号、什么时候决定的，以及他愿不愿意把思路说清楚。上面整段是在转述和追问；我没有自称预言家，也没有说自己验过3号。"
+        )
+        for observer in room.players.values():
+            if not observer.ai_context:
+                continue
+            ctx = observer.ai_context
+            ctx.current_round = 1
+            ctx.add_speech(speaker, original)
+            ctx.current_round = 2
+            ctx.add_speech(speaker, "这一轮我想先把大家各自的投票理由听完。")
+            ctx.current_round = 3
+            ctx.add_speech(
+                accuser,
+                "2号第一天不是说自己查过3号吗？现在怎么又不认了？需要把原话核对清楚。",
+            )
+            ctx.add_speech(
+                speaker,
+                "我从没说过自己验过3号，也没自称预言家；我那天是在转述5号的话。",
+            )
+        return room, service, actor
     if actor.role.value == "seer":
         actor.ai_context.add_seer_result(
             room.get_player_by_number(8).display_name, True
@@ -137,7 +165,9 @@ def create_scenario(
     return room, service, actor
 
 
-async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=True):
+async def evaluate(
+    factory, output, seeds, concurrency=4, matrix=True, mixed=True, scenario_names=None
+):
     """Evaluate fixed scenarios, all personalities and mixed-game round replays.
 
     Args:
@@ -147,6 +177,7 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
         concurrency: Maximum concurrent independent cases.
         matrix: Include day/vote/last-words samples for every personality.
         mixed: Include two-round, one-human/eight-AI public-phase replays.
+        scenario_names: Optional fixed-scenario filter, independent of matrix/mixed.
 
     Returns:
         Sample count and observable generation failures. Semantic judgements
@@ -163,7 +194,9 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
         prefix = plugin.models.__package__.rsplit(".", 1)[0]
         profiles = importlib.import_module(f"{prefix}.models.personality").PERSONALITIES
 
-        async def emit(room, service, actor, task, seed, scenario, profile):
+        async def emit(
+            room, service, actor, task, seed, scenario, profile, *, commit_ballot=False
+        ):
             """Run a real action and persist every complete attempt.
 
             Args:
@@ -174,6 +207,7 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
                 seed: Requested evaluation seed.
                 scenario: Evidence scenario label.
                 profile: Personality key.
+                commit_ballot: Exercise the real day-vote worker for this actor only.
 
             Returns:
                 Public speech and optional vote target.
@@ -181,13 +215,59 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
             nonlocal samples, failures
             start = len(actor.ai_context.decision_audit)
             target = None
+            submitted_vote = None
             if task == "seer_check":
                 room.phase = plugin.models.GamePhase.NIGHT_SEER
                 target = await service.decide_seer_check(actor, room)
                 speech = ""
             elif task == "day_vote":
                 room.phase = plugin.models.GamePhase.DAY_VOTE
-                speech, target = await service.decide_vote(actor, room)
+                if commit_ballot:
+                    flags = {p.id: p.is_ai for p in room.players.values()}
+                    for player in room.players.values():
+                        player.is_ai = player.id == actor.id
+                    public_messages = []
+                    messages = SimpleNamespace(
+                        send_group_message=AsyncMock(
+                            side_effect=lambda _, text: (
+                                public_messages.append(text) or True
+                            )
+                        )
+                    )
+                    manager = SimpleNamespace(
+                        rooms={room.group_id: room},
+                        config=room.config,
+                        ai_player_service=service,
+                        message_service=messages,
+                    )
+                    manager.get_room = manager.rooms.get
+                    try:
+                        await plugin.phases.DayVotePhase(
+                            manager
+                        )._handle_ai_discussion_and_votes(
+                            room, generation=room.vote_state.generation
+                        )
+                    finally:
+                        for player in room.players.values():
+                            player.is_ai = flags[player.id]
+                    ballot = room.vote_state.day_votes.get(actor.id)
+                    selected = room.get_player(ballot) if ballot else None
+                    target = selected.number if selected else None
+                    speech = next(
+                        (
+                            item["content"]
+                            for item in reversed(room.vote_discussion)
+                            if item["player"] == actor.display_name
+                        ),
+                        "",
+                    )
+                    submitted_vote = {
+                        "target_number": target,
+                        "abstain": ballot == "ABSTAIN",
+                        "public_messages": public_messages,
+                    }
+                else:
+                    speech, target = await service.decide_vote(actor, room)
             elif task == "last_words":
                 room.phase = plugin.models.GamePhase.LAST_WORDS
                 room.last_words_player_id = actor.id
@@ -211,6 +291,7 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
                         "task": task,
                         "speech": speech,
                         "target_number": target,
+                        "submitted_vote": submitted_vote,
                         "characters": len(speech),
                         "failed": failed,
                         "audit": attempts,
@@ -252,7 +333,14 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
                             f"投票放逐：{actor.display_name} 被放逐出局（遗言场景指定）"
                         )
                     speech, number = await emit(
-                        room, service, actor, task, seed, scenario, profile
+                        room,
+                        service,
+                        actor,
+                        task,
+                        seed,
+                        scenario,
+                        profile,
+                        commit_ballot=task == "day_vote",
                     )
                     for observer in room.players.values():
                         if not observer.ai_context:
@@ -260,17 +348,6 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
                         observer.ai_context.current_round = room.current_round
                         if task == "day_speech":
                             observer.ai_context.add_speech(actor.display_name, speech)
-                        elif task == "day_vote":
-                            observer.ai_context.add_vote_discussion(
-                                actor.display_name, speech
-                            )
-                            target = (
-                                room.get_player_by_number(number) if number else None
-                            )
-                            observer.ai_context.add_vote(
-                                actor.display_name,
-                                target.display_name if target else "弃票",
-                            )
 
         async def run_mixed(seed):
             """Replay two public rounds using actual generated statements and votes.
@@ -353,7 +430,14 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
             ("witch_memory", "witch"),
             ("self_vote", "villager"),
             ("first_night", "seer"),
+            ("history_retraction", "villager"),
+            ("history_clarification", "villager"),
         ]
+        if scenario_names is not None:
+            unknown = set(scenario_names) - {name for name, _ in scenarios}
+            if unknown:
+                raise ValueError(f"Unknown fixed scenarios: {sorted(unknown)}")
+            scenarios = [item for item in scenarios if item[0] in scenario_names]
         for seed in seeds:
             for scenario, role in scenarios:
                 jobs.append(
@@ -364,6 +448,8 @@ async def evaluate(factory, output, seeds, concurrency=4, matrix=True, mixed=Tru
                         role,
                         ["seer_check"]
                         if scenario == "first_night"
+                        else ["day_vote"]
+                        if scenario.startswith("history_")
                         else ["day_speech", "day_vote"],
                     )
                 )
@@ -398,6 +484,9 @@ async def main():
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--no-matrix", action="store_true")
     parser.add_argument("--no-mixed", action="store_true")
+    parser.add_argument(
+        "--scenarios", nargs="+", help="Run only the named fixed scenarios"
+    )
     args = parser.parse_args()
     if not 1 <= args.concurrency <= 8:
         parser.error("concurrency must be between 1 and 8")
@@ -411,6 +500,7 @@ async def main():
             args.concurrency,
             not args.no_matrix,
             not args.no_mixed,
+            args.scenarios,
         )
     finally:
         close = getattr(factory, "aclose", None)

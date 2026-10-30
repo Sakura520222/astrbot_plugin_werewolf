@@ -120,6 +120,9 @@ class GameRoom:
     used_fallback_speeches: set[str] = field(default_factory=set, repr=False)
     last_fallback_speech: str = ""
 
+    # Complete review replies are separate from authoritative event logs.
+    review_audit: list[dict] = field(default_factory=list)
+
     # 并发控制
     _lock: Lock = field(default_factory=Lock, init=False)  # 用于保护共享状态的锁
 
